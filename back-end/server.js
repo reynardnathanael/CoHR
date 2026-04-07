@@ -1,8 +1,8 @@
+require("dotenv").config();
 const fastify = require("fastify")({ logger: true });
 const fastifyCors = require("@fastify/cors");
 
-// const ip = "0.0.0.0";
-const ip = "172.17.200.48";
+const ip = "0.0.0.0";
 
 const createServer = async (options) => {
     try {
@@ -42,9 +42,9 @@ const createServer = async (options) => {
         // Use the custom middleware
         fastify.addHook('preHandler', flattenFormData);
         fastify.register(require('@fastify/cookie'));
-        fastify.register(require('./src/middleware/auth-middleware'));
+        // fastify.register(require('./src/middleware/auth-middleware'));
         fastify.register(require('./src/routes/api'), {
-            prefix: '/api/nurse-education-portal'
+            prefix: '/api/cohr'
         });
 
         await fastify.listen({ port: 8021, host: ip }, (err) => {
