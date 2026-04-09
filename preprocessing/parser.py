@@ -61,6 +61,7 @@ SECTION_HEADINGS = {
 
 
 def normalize_text(text):
+    text = text.replace("**", "")
     text = text.replace("\r", "\n")
     text = re.sub(r"\n{2,}", "\n\n", text)
     text = re.sub(r"[ \t]+", " ", text)
