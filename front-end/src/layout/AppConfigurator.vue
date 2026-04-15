@@ -192,6 +192,7 @@ function onPresetChange() {
 
     $t().preset(presetValue).preset(getPresetExt()).surfacePalette(surfacePalette).use({ useDefaultOptions: true });
 }
+onPresetChange();
 </script>
 
 <template>
