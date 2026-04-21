@@ -19,7 +19,7 @@ const model = ref([
             {
                 label: 'Upload Resume',
                 icon: 'pi pi-fw pi-id-card',
-                to: '/upload-resume'
+                to: '/upload'
             },
             // {
             //     label: 'Input',

@@ -1,6 +1,6 @@
 <template>
     <div class="grid grid-cols-12 gap-8">
-        <div class="card col-span-12 lg:col-span-5">
+        <div class="card col-span-12">
             <div class="px-4 mt-3 w-full rounded-2xl bg-indigo-900">
                 <p class="text-white text-lg pt-3 font-semibold">Upload a CV or Resume</p>
                 <FileUpload @select="onFileSelect" :showUploadButton="false" ref="fileUpload" name="files" :multiple="false" accept="application/pdf" :auto="false" style="border: 0;" class="bg-indigo-900">
@@ -53,13 +53,12 @@
                 <Button :loading="loading" class="w-40 !bg-indigo-200 !text-black !border-indigo-900" type="button" label="Submit" icon="pi pi-upload" iconPos="right" @click="createPostFile" style="border-radius: 16px;"></Button>
             </div>
         </div>
-        <div class="card col-span-12 lg:col-span-7">
+        <!-- <div class="card col-span-12 lg:col-span-7">
             <div class="flex flex-col gap-1">
                 <label for="description" class="text-lg font-medium">Result</label>
                 <Textarea class="text-justify" id="description" v-model="result" rows="5" fluid autoResize readonly />
             </div>
-            <Chart type="radar" :data="chartData" :options="chartOptions" class="w-full" />
-        </div>
+        </div> -->
     </div>
 </template>
 
@@ -130,63 +129,4 @@ const formatSize = (bytes) => {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
-
-onMounted(() => {
-    chartData.value = setChartData();
-    chartOptions.value = setChartOptions();
-});
-
-const chartData = ref();
-const chartOptions = ref();
-        
-const setChartData = () => {
-    const documentStyle = getComputedStyle(document.documentElement);
-    const textColor = documentStyle.getPropertyValue('--p-text-color');
-
-    return {
-        labels: ['Eating', 'Drinking', 'Sleeping', 'Designing', 'Coding', 'Cycling', 'Running'],
-        datasets: [
-            {
-                label: 'My First dataset',
-                borderColor: documentStyle.getPropertyValue('--p-gray-400'),
-                pointBackgroundColor: documentStyle.getPropertyValue('--p-gray-400'),
-                pointBorderColor: documentStyle.getPropertyValue('--p-gray-400'),
-                pointHoverBackgroundColor: textColor,
-                pointHoverBorderColor: documentStyle.getPropertyValue('--p-gray-400'),
-                data: [65, 59, 90, 81, 56, 55, 40]
-            },
-            {
-                label: 'My Second dataset',
-                borderColor: documentStyle.getPropertyValue('--p-pink-400'),
-                pointBackgroundColor: documentStyle.getPropertyValue('--p-pink-400'),
-                pointBorderColor: documentStyle.getPropertyValue('--p-pink-400'),
-                pointHoverBackgroundColor: textColor,
-                pointHoverBorderColor: documentStyle.getPropertyValue('--p-pink-400'),
-                data: [28, 48, 40, 19, 96, 27, 100]
-            }
-        ]
-    };
-};
-const setChartOptions = () => {
-    const documentStyle = getComputedStyle(document.documentElement);
-    const textColor = documentStyle.getPropertyValue('--p-text-color');
-    const textColorSecondary = documentStyle.getPropertyValue('--p-text-muted-color');
-
-    return {
-        plugins: {
-            legend: {
-                labels: {
-                    color: textColor
-                }
-            }
-        },
-        scales: {
-            r: {
-                grid: {
-                    color: textColorSecondary
-                }
-            }
-        }
-    };
-}
 </script>

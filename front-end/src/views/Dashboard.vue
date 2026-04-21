@@ -1,10 +1,10 @@
 <template>
     <div class="grid grid-cols-12 gap-8">
-        <div class="col-span-12 grid grid-cols-1 xl:grid-cols-2 gap-8">
+        <div class="col-span-12 grid grid-cols-1 xl:grid-cols-1 gap-8">
             <div class="card">
-                <div class="text-right">
+                <!-- <div class="text-right">
                     <Button @click="goToUpload" label="Add" style="background-color: #c7d2fe; border: 2px solid #1e1b4b; color: #1e1b4b;" icon="pi pi-plus" iconPos="right" rounded class="hover:ring-2 mb-1" />
-                </div>
+                </div> -->
                 <DataTable class="main-table" :value="customers" paginator :rows="5" :rowsPerPageOptions="[5, 10, 20, 50]" scrollable selectionMode="single" scrollHeight="400px" tableStyle="min-width: 100%">
                     <Column field="name" header="Name" style="width: 25%"></Column>
                     <Column field="status" header="Status" style="width: 25%">
