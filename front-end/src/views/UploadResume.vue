@@ -64,6 +64,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { api } from "../helpers/axios";
+import { useRouter, useRoute } from "vue-router";
+import { useToast } from 'primevue/usetoast';
+import { useToastStore } from '../helpers/toastStore';
 
 const fileUpload = ref();
 const totalSize = ref(0);
@@ -128,5 +132,46 @@ const formatSize = (bytes) => {
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+const createPostFile = async () => {
+    // Check if a file is actually selected
+    if (!fileUpload.value || fileUpload.value.files.length === 0) {
+        alert("Please select a PDF file first.");
+        return;
+    }
+
+    const file = fileUpload.value.files[0];
+    console.log(file)
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    for (let [key, value] of formData.entries()) {
+        console.log(`FormData successfully contains - ${key}:`, value.name);
+    }
+
+
+    await api.post('/upload-resume', formData)
+    .then((response) => {
+        console.log("Extracted PDF Text:", response.data.data);
+    })
+    .catch((error) => {
+        console.error("Error uploading the resume:", error);
+    });
+    
+    // try {
+    //     loading.value = true;
+    //     const response = await fetch('/upload-resume', {
+    //         method: 'POST',
+    //         body: formData
+    //     });
+        
+    //     const data = await response.json();
+    //     console.log("Extracted PDF Text:", data.text);
+    // } catch (error) {
+    //     console.error("Error uploading the resume:", error);
+    // } finally {
+    //     loading.value = false;
+    // }
 };
 </script>

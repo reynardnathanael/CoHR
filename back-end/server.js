@@ -3,6 +3,8 @@ const fastify = require("fastify")({ logger: true });
 const fastifyCors = require("@fastify/cors");
 
 const ip = "0.0.0.0";
+// const ip = "192.168.1.155";
+// const ip = "192.168.4.156";
 
 const createServer = async (options) => {
     try {
@@ -26,12 +28,15 @@ const createServer = async (options) => {
                 // Flatten the fields object
                 req.body = Object.fromEntries(
                     Object.entries(req.body).map(([key, value]) => {
-                        if (typeof value === 'object' && value.type === 'file') {
+                        // if (typeof value === 'object' && value.type === 'file') {
+                        const item = Array.isArray(value) ? value[0] : value;
+
+                        if (item && typeof item === 'object' && item.type === 'file') {
                             // Skip file fields
-                            return [key, value];
+                            return [key, item];
                         } else {
                             // Flatten field value
-                            return [key, value.value];
+                            return [key, item ? item.value : undefined];
                         }
                     })
                 );
