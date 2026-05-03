@@ -1,9 +1,13 @@
 import axios from "axios";
 
+// const api = axios.create({
+//     // baseURL: "http://172.17.200.48:8021/api/nurse-education-portal",
+//     baseURL: "http://localhost:8021/api/cohr",
+//     withCredentials: true,
+// });
+
 const api = axios.create({
-    // baseURL: "http://172.17.200.48:8021/api/nurse-education-portal",
-    baseURL: "http://localhost:8021/api/cohr",
-    withCredentials: true,
+    baseURL: 'http://localhost:8080/api', // Your FastAPI backend URL
 });
 
 export { api };

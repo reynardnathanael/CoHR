@@ -12,6 +12,7 @@ class ResumeController {
         else {
             const data = await ResumeService.read(pdf);
             replyHandling.sendReply(reply, data.code, data.status, data.message, data.data);
+            console.log(data.data)
         }
     }
 

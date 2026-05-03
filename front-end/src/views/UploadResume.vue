@@ -53,12 +53,12 @@
                 <Button :loading="loading" class="w-40 !bg-indigo-200 !text-black !border-indigo-900" type="button" label="Submit" icon="pi pi-upload" iconPos="right" @click="createPostFile" style="border-radius: 16px;"></Button>
             </div>
         </div>
-        <!-- <div class="card col-span-12 lg:col-span-7">
+        <div class="card col-span-12 lg:col-span-7">
             <div class="flex flex-col gap-1">
                 <label for="description" class="text-lg font-medium">Result</label>
                 <Textarea class="text-justify" id="description" v-model="result" rows="5" fluid autoResize readonly />
             </div>
-        </div> -->
+        </div>
     </div>
 </template>
 
@@ -150,13 +150,17 @@ const createPostFile = async () => {
         console.log(`FormData successfully contains - ${key}:`, value.name);
     }
 
-
-    await api.post('/upload-resume', formData)
+        loading.value = true;
+    await api.post('/parse-pdf', formData)
     .then((response) => {
-        console.log("Extracted PDF Text:", response.data.data);
+        console.log("Extracted PDF Text:", response.data.content);
+            result.value = response.data.content;
     })
     .catch((error) => {
         console.error("Error uploading the resume:", error);
+        })
+        .finally(() => {
+            loading.value = false;
     });
     
     // try {

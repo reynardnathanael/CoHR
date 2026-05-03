@@ -7,6 +7,9 @@ import { PrimeVueResolver } from '@primevue/auto-import-resolver'
 
 // https://vite.dev/config/
 export default defineConfig({
+    server: {
+      port: 5175,
+  },
   plugins: [
     vue(),
     tailwindcss(),
