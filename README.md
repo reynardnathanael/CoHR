@@ -20,4 +20,38 @@ HR (human resources) professionals handle numerous daily tasks and act as gateke
 
 ## 6. Demo Video
 
+## 7. Installation
+
+### Front-end (Vue.js + Vite + Tailwind CSS + PrimeVue)
+First, navigate to the front-end directory and install the required npm packages:
+```bash
+cd front-end
+npm install
+npm update
+```
+
+### Back-end (FastAPI)
+Navigate to the back-end directory. We recommend creating a virtual environment (e.g., using `conda` or `venv`) before installing the Python dependencies:
+```bash
+cd back-end
+# Create and activate your virtual environment here (e.g., conda create -n cohr python=3.13 -y && conda activate cohr)
+pip install -r requirements.txt
+```
+
+## 8. Execution
+
+To run the application, you will need to start both the front-end and back-end servers in separate terminal instances.
+
+### Front-end Server
+```bash
+cd front-end
+npm run dev
+```
+
+### Back-end Server
+```bash
+cd back-end
+uvicorn main:app --reload --port 8080
+```
+
 ## Reference
