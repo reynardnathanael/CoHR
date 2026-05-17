@@ -6,7 +6,7 @@ import sys
 import warnings
 from pathlib import Path
 
-from extractor import parse_resume_info
+from extractor import extract_resume_info
 from parser import parse_pdf_with_docling
 from similarity import calculate_similarity
 
@@ -16,11 +16,14 @@ def build_output(job_description, file_paths):
     failed_files = []
 
     for file_path in file_paths:
-        file_name = Path(file_path).name
+        file_path_obj = Path(file_path)
+        file_name = file_path_obj.name
 
         try:
-            raw_text = parse_pdf_with_docling(file_path)
-            resume_info = parse_resume_info(file_name=file_name, raw_text=raw_text)
+            raw_text = parse_pdf_with_docling(file_path_obj)
+            resume_info = extract_resume_info(raw_text)
+            resume_info["file_name"] = file_name
+            resume_info["full_text"] = raw_text
             resumes.append(resume_info)
         except Exception as exc:
             failed_files.append({"file_name": file_name, "error": str(exc)})
@@ -40,6 +43,9 @@ def build_output(job_description, file_paths):
                 "education": resume.get("education", ""),
                 "experience": resume.get("experience", ""),
                 "summary": resume.get("summary", ""),
+                "email": resume.get("email", ""),
+                "phone_number": resume.get("phone_number", ""),
+                "location": resume.get("location", ""),
             }
         )
 

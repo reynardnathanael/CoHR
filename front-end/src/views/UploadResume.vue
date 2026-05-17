@@ -3,7 +3,7 @@
         <div class="card col-span-12">
             <div class="px-4 mt-3 w-full rounded-2xl bg-indigo-900">
                 <p class="text-white text-lg pt-3 font-semibold">Upload a CV or Resume</p>
-                <FileUpload @select="onFileSelect" :showUploadButton="false" ref="fileUpload" name="files" :multiple="false" accept="application/pdf" :auto="false" style="border: 0;" class="bg-indigo-900">
+                <FileUpload @select="onFileSelect" :showUploadButton="false" ref="fileUpload" name="files" :multiple="true" accept="application/pdf" :auto="false" style="border: 0;" class="bg-indigo-900">
                     <template #empty>
                         <div class="flex justify-center items-center space-x-4 border-2 py-4 border-dashed rounded-2xl" style="border-color: #1C1C1C;">
                             <!-- <i class="pi pi-cloud-upload !text-4xl" /> -->
@@ -26,7 +26,7 @@
                         </div>
                     </template>
                 </FileUpload>
-                <p class="text-white py-3 text-sm">Only PDF files</p>
+                <p class="text-white py-3 text-sm">Upload one or more PDF resumes</p>
             </div>
             <div class="my-8 flex justify-center">
                 <Select v-model="selectedCountry" :options="roles" filter optionLabel="name" placeholder="Select job position" class="w-full">
@@ -55,27 +55,40 @@
         </div>
         <div class="card col-span-12 lg:col-span-7">
             <div class="flex flex-col gap-1">
-                <label for="description" class="text-lg font-medium">Result</label>
-                <Textarea class="text-justify" id="description" v-model="result" rows="5" fluid autoResize readonly />
+                <label for="result" class="text-lg font-medium">Result</label>
+                <Textarea class="text-justify" id="result" v-model="result" rows="5" fluid autoResize readonly />
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, watch } from 'vue';
 import { api } from "../helpers/axios";
-import { useRouter, useRoute } from "vue-router";
-import { useToast } from 'primevue/usetoast';
-import { useToastStore } from '../helpers/toastStore';
+import { useRouter } from "vue-router";
 
 const fileUpload = ref();
-const totalSize = ref(0);
-const totalSizePercent = ref(0);
+const router = useRouter();
 const selectedCountry = ref();
 const jobDescription = ref("Cras nec velit aliquet, tempus velit eu, luctus lacus. Nulla vulputate lacus nisl, accumsan tristique magna rutrum id. Sed nisi magna, cursus vel velit eget, maximus cursus lacus. Donec non libero magna. Vestibulum vitae finibus ante. Praesent sit amet turpis faucibus, posuere augue a, posuere nisl. Donec ut enim varius, porttitor ligula in, accumsan neque. Etiam vel convallis lorem. Aliquam erat volutpat. Vestibulum gravida urna quis dolor ornare, ullamcorper condimentum justo aliquet. In ligula tortor, posuere accumsan diam id, vestibulum porta metus. Praesent eget imperdiet eros. \n\nCurabitur non quam sed magna tincidunt iaculis nec ac felis. Quisque pulvinar ligula neque, vitae hendrerit felis hendrerit ac. Vivamus nec vehicula elit, sit amet condimentum quam. Morbi quis orci ac massa semper congue. Aliquam eget imperdiet nibh, vel bibendum neque. Etiam sit amet massa ut sem feugiat euismod. Maecenas convallis mollis libero, a bibendum risus placerat nec. Praesent blandit faucibus neque vitae convallis. Nam sed ornare augue.Proin eu ullamcorper orci. In at erat nibh. Vestibulum a turpis sapien. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.");
 const loading = ref(false);
-const result = ref("Curabitur a elit nec quam finibus vehicula. Cras nec lacus vitae diam euismod maximus ut et mauris. Vestibulum aliquet turpis eu erat luctus malesuada. Curabitur id accumsan nisi. Mauris ut diam a tortor varius hendrerit nec a sapien. Aenean congue mi libero, id molestie sapien egestas vitae. Pellentesque turpis erat, cursus vel nunc ac, iaculis pellentesque justo. Etiam euismod lectus mollis est consequat, in fringilla purus dignissim. Aliquam viverra, tortor et sagittis auctor, elit quam fermentum lorem, ut venenatis sapien lacus ac sem. Cras tempor id sapien at efficitur. Fusce sodales blandit orci. Nullam purus augue, efficitur rutrum ipsum in, luctus laoreet elit. Maecenas et fringilla nunc. Pellentesque ac metus elit. Pellentesque et molestie tortor. Aliquam pulvinar nibh turpis, ut vulputate mi scelerisque vel. Cras nulla orci, faucibus quis libero non, bibendum consectetur purus. Maecenas vel nisi eget arcu egestas consequat. \n\nSed consequat risus felis, a ullamcorper felis elementum facilisis. Donec dignissim libero non interdum blandit. Interdum et malesuada fames ac ante ipsum primis in faucibus.Cras lacus nisl, tempus volutpat pharetra nec, vehicula sed dolor. Suspendisse sapien lorem, tempus ut pharetra in, tincidunt non justo. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Nullam semper, erat eu convallis posuere, turpis mauris placerat felis, sed dictum sem augue varius libero. Phasellus eleifend lacus purus, eu tempor metus pulvinar ac. Duis euismod nibh malesuada rutrum viverra. Vivamus gravida molestie nisi ac auctor. Nulla facilisi. Ut eget risus diam. Nunc hendrerit nisi at lectus elementum, eu rutrum massa fermentum. Donec maximus mi nec pellentesque tempor. Integer tempor felis sed dui feugiat, dignissim egestas orci vehicula. Fusce volutpat a ligula non posuere. Quisque eget lacus dapibus risus pulvinar suscipit. Sed a libero et quam interdum pharetra. Duis lobortis tincidunt arcu, nec maximus ante pellentesque ac. Sed velit sapien, tempus id molestie nec, ultricies id urna.Etiam lorem turpis, semper vitae dignissim vitae, mattis at mauris. Etiam cursus nisl nec congue mattis. Maecenas iaculis eleifend quam. Aliquam nisi mi, sollicitudin id diam nec, elementum tempus arcu. Curabitur et est id massa semper scelerisque. Duis ut vulputate felis. In malesuada ante posuere, finibus nunc ut, egestas mauris. \n\nSuspendisse at volutpat eros. Duis eget feugiat erat. Maecenas et suscipit mauris. Curabitur id sollicitudin erat. Aenean ultricies felis et mauris viverra pellentesque. Duis tempor nisl mollis ante malesuada, at elementum lorem pharetra. Quisque ultricies ac erat vitae gravida. Ut vitae ornare tellus, sed cursus velit. Quisque ipsum mi, pretium et imperdiet sit amet, euismod sed mi. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Maecenas tristique posuere tincidunt. Cras faucibus, enim in molestie tincidunt, magna neque lobortis elit, vitae bibendum eros justo at risus. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Ut efficitur pretium velit vitae mattis. Sed quis nunc porta turpis tincidunt feugiat. Phasellus nec tortor justo. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Phasellus tincidunt libero tellus, sit amet malesuada diam condimentum sed. Duis. Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. \n\nUt hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos. Sed ut perspiciatis, unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam eaque ipsa, quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt, explicabo. Nemo enim ipsam voluptatem, quia voluptas sit, aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos, qui ratione voluptatem sequi nesciunt, neque porro quisquam est, qui dolorem ipsum, quia dolor sit amet consectetur adipisci[ng] velit, sed quia non numquam [do] eius modi tempora inci[di]dunt, ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum[d] exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? [D]Quis autem vel eum i[r]ure reprehenderit, qui in ea voluptate velit esse, quam nihil molestiae consequatur, vel illum, qui dolorem eum fugiat, quo voluptas nulla pariatur?");
+const result = ref("Select one or more resumes and submit to rank them against the chosen job description.");
+
+const defaultJobDescription = jobDescription.value;
+const roleDescriptions = {
+    'Software Engineer': 'Looking for a software engineer with experience in building web applications, writing clean code, debugging production issues, and collaborating with product teams.',
+    'Product Manager': 'Looking for a product manager who can translate user needs into roadmaps, coordinate delivery, and work closely with engineering and design teams.',
+    'Data Scientist': 'Looking for a data scientist with experience in statistics, machine learning, data cleaning, model evaluation, and communicating insights clearly.',
+    'UX Designer': 'Looking for a UX designer with experience in wireframing, prototyping, user research, interaction design, and accessibility.',
+    'Marketing Specialist': 'Looking for a marketing specialist who understands campaign planning, content creation, analytics, and audience growth.',
+    'Sales Associate': 'Looking for a sales associate with strong communication skills, customer engagement experience, and the ability to meet sales targets.',
+    'Data Analyst': 'Looking for a data analyst with experience in SQL, dashboards, reporting, data visualization, and turning data into recommendations.',
+    'Human Resources Manager': 'Looking for an HR manager with experience in recruitment, employee relations, policy implementation, and talent screening.',
+    'Financial Analyst': 'Looking for a financial analyst with experience in financial modeling, forecasting, reporting, and business analysis.',
+    'Project Manager': 'Looking for a project manager who can plan delivery, manage timelines, coordinate stakeholders, and keep projects on track.',
+    'Quality Assurance Engineer': 'Looking for a quality assurance engineer with experience in test planning, automation, bug tracking, and release validation.',
+    'Customer Support Representative': 'Looking for a customer support representative with strong communication, issue resolution, and service-oriented experience.',
+};
 
 const roles = ref([
     { name: 'Software Engineer' },
@@ -92,90 +105,52 @@ const roles = ref([
     { name: 'Customer Support Representative' },    
 ]);
 
+watch(selectedCountry, (role) => {
+    const roleName = role?.name;
+    jobDescription.value = roleName && roleDescriptions[roleName]
+        ? roleDescriptions[roleName]
+        : defaultJobDescription;
+});
+
 const onFileSelect = (event) => {
-    // When multiple is false, we only want one file in the list.
-    // The event.files array contains the files that were just selected.
-    // We'll replace the component's entire file list with an array containing only the first of the newly selected files.
-    if (fileUpload.value.files.length > 1) {
-        fileUpload.value.files.splice(0, fileUpload.value.files.length - 1);
-    }
-};
-
-const onSelectedFiles = (event) => {
-    let _totalSize = 0;
-    event.files.forEach((file) => {
-        _totalSize += file.size;
-    });
-    totalSize.value = _totalSize;
-    totalSizePercent.value = Math.min(Math.round((_totalSize / 1000000) * 100), 100);
-};
-
-const uploadEvent = (uploadCallback) => {
-    uploadCallback();
-};
-
-const onTemplatedUpload = (event) => {
-    // In a real app, you would make an axios/fetch request to your backend here.
-    // By using customUpload, this allows us to simulate a successful upload for the UI.
-    console.log("File uploaded successfully!");
-};
-
-const onRemoveTemplatingFile = (file, removeFileCallback, index) => {
-    removeFileCallback(index);
-    totalSize.value -= file.size;
-    totalSizePercent.value = Math.min(Math.round((totalSize.value / 1000000) * 100), 100);
-};
-
-const formatSize = (bytes) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    const files = event?.files ?? [];
+    result.value = files.length > 0
+        ? `${files.length} file(s) ready for analysis.`
+        : 'Select one or more resumes and submit to rank them.';
 };
 
 const createPostFile = async () => {
-    // Check if a file is actually selected
     if (!fileUpload.value || fileUpload.value.files.length === 0) {
-        alert("Please select a PDF file first.");
+        alert("Please select at least one PDF file first.");
         return;
     }
 
-    const file = fileUpload.value.files[0];
-    console.log(file)
     const formData = new FormData();
-    formData.append('file', file);
-    
-    for (let [key, value] of formData.entries()) {
-        console.log(`FormData successfully contains - ${key}:`, value.name);
-    }
+    const files = Array.from(fileUpload.value.files);
 
-        loading.value = true;
-    await api.post('/parse-pdf', formData)
-    .then((response) => {
-        console.log("Extracted PDF Text:", response.data.content);
-            result.value = response.data.content;
-    })
-    .catch((error) => {
-        console.error("Error uploading the resume:", error);
-        })
-        .finally(() => {
-            loading.value = false;
+    files.forEach((file) => {
+        formData.append('files', file);
     });
-    
-    // try {
-    //     loading.value = true;
-    //     const response = await fetch('/upload-resume', {
-    //         method: 'POST',
-    //         body: formData
-    //     });
-        
-    //     const data = await response.json();
-    //     console.log("Extracted PDF Text:", data.text);
-    // } catch (error) {
-    //     console.error("Error uploading the resume:", error);
-    // } finally {
-    //     loading.value = false;
-    // }
+    formData.append('job_description', jobDescription.value);
+
+    loading.value = true;
+    result.value = 'Analyzing resumes...';
+
+    try {
+        const response = await api.post('/analyze-resumes', formData);
+
+        sessionStorage.setItem('cohr_analysis_result', JSON.stringify(response.data));
+        result.value = `Analysis complete. Ranked ${response.data.total} candidate(s).`;
+        await router.push('/result');
+    } catch (error) {
+        console.error("Error uploading resumes:", error);
+        if (!error?.response) {
+            result.value = 'Could not reach the backend at http://localhost:8080. Start the FastAPI server, then try again.';
+        } else {
+            result.value = error?.response?.data?.detail || 'Something went wrong while analyzing resumes.';
+        }
+    } finally {
+        loading.value = false;
+    }
 };
 </script>

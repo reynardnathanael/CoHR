@@ -1,147 +1,141 @@
-<style scoped>
-/* Allow the circle to overflow outside the progress bar boundaries */
-:deep(.p-progressbar) {
-    overflow: visible !important;
-}
-
-:deep(.p-progressbar-value) {
-    position: relative;
-    overflow: visible !important;
-    border-radius: 6px; /* Rounds the inner bar since the parent no longer clips it */
-}
-
-/* Create the circle and attach it to the end of the progress bar value */
-:deep(.p-progressbar-value::after) {
-    content: '';
-    position: absolute;
-    top: 50%;
-    right: 0;
-    transform: translate(25%, -50%);
-    width: 1.5rem;
-    height: 1.5rem;
-    background-color: #ffffff; 
-    border: 3px solid rgb(55, 48, 163);
-    border-radius: 50%;
-    z-index: 10;
-}
-</style>
-
 <template>
-    <div class="flex flex-col w-full">
-        <div class="card flex justify-center">
-            <Chart type="radar" :data="chartData" :options="chartOptions" class="w-full md:w-[30rem]" />
-        </div>
-    </div>
-    <div class="card flex flex-col gap-4 w-full mt-4">
-        <!-- Header Row -->
-        <div class="flex items-center w-full font-bold">
-            <div class="w-1/6 text-lg text-right pr-8">Aptitude</div>
-            <div class="w-2/3 grid grid-cols-10 text-right">
-                <span>1</span>
-                <span>2</span>
-                <span>3</span>
-                <span>4</span>
-                <span>5</span>
-                <span>6</span>
-                <span>7</span>
-                <span>8</span>
-                <span>9</span>
-                <span>10</span>
+    <div class="grid grid-cols-12 gap-8">
+        <div class="card col-span-12">
+            <div class="flex flex-col gap-4">
+                <div class="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                        <p class="text-sm uppercase tracking-[0.2em] text-indigo-500 font-semibold">Screening Result</p>
+                        <h1 class="text-2xl font-bold text-slate-900">Ranked Candidates</h1>
+                    </div>
+                    <div class="rounded-full bg-indigo-100 text-indigo-900 px-4 py-2 font-semibold">
+                        {{ totalCandidates }} candidate(s)
+                    </div>
+                </div>
+
+                <p v-if="jobDescription" class="text-slate-600 whitespace-pre-line">
+                    {{ jobDescription }}
+                </p>
+
+                <p v-else class="text-slate-500">
+                    No analysis data found yet. Upload resumes from the upload page to generate rankings.
+                </p>
             </div>
-            <div class="w-1/6"></div>
         </div>
-        
-        <!-- Result Row -->
-        <div class="flex items-center w-full">
-            <div class="w-1/6 text-right pr-8">General Abilities</div>
-            <div class="w-2/3">
-                <ProgressBar :value="60">6</ProgressBar>
+
+        <div v-if="candidates.length > 0" class="col-span-12 grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div
+                v-for="(candidate, index) in candidates"
+                :key="candidate.file_name || index"
+                class="card border border-indigo-100 shadow-sm"
+            >
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-sm text-slate-500">Rank #{{ index + 1 }}</p>
+                        <h2 class="text-xl font-semibold text-slate-900">{{ candidate.file_name || 'Unnamed resume' }}</h2>
+                        <p class="text-sm text-slate-500 mt-1">
+                            {{ candidate.email || 'Email not found' }}
+                            <span v-if="candidate.phone_number"> · {{ candidate.phone_number }}</span>
+                        </p>
+                        <p class="text-sm text-slate-500">
+                            {{ candidate.location || 'Location not extracted' }}
+                        </p>
+                    </div>
+
+                    <div class="rounded-2xl bg-indigo-50 px-4 py-3 text-right min-w-28">
+                        <p class="text-xs uppercase tracking-[0.2em] text-indigo-500 font-semibold">Match</p>
+                        <p class="text-3xl font-bold text-indigo-900">{{ candidate.similarity_score }}%</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 mt-5">
+                    <div class="rounded-xl bg-slate-50 p-3">
+                        <p class="text-xs text-slate-500">Embedding</p>
+                        <p class="text-lg font-semibold text-slate-900">{{ candidate.embedding_score ?? 0 }}%</p>
+                    </div>
+                    <div class="rounded-xl bg-slate-50 p-3">
+                        <p class="text-xs text-slate-500">Skills</p>
+                        <p class="text-lg font-semibold text-slate-900">{{ candidate.skill_score ?? 0 }}%</p>
+                    </div>
+                    <div class="rounded-xl bg-slate-50 p-3">
+                        <p class="text-xs text-slate-500">Matched</p>
+                        <p class="text-lg font-semibold text-slate-900">{{ candidate.matched_skills?.length || 0 }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <p class="text-sm font-semibold text-slate-700 mb-2">Matched Skills</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span
+                            v-for="skill in candidate.matched_skills || []"
+                            :key="skill"
+                            class="rounded-full bg-indigo-100 text-indigo-900 px-3 py-1 text-xs font-medium"
+                        >
+                            {{ skill }}
+                        </span>
+                        <span v-if="!candidate.matched_skills || candidate.matched_skills.length === 0" class="text-sm text-slate-500">
+                            No direct skill overlap detected.
+                        </span>
+                    </div>
+                </div>
+
+                <div class="mt-5 space-y-4">
+                    <div>
+                        <p class="text-sm font-semibold text-slate-700 mb-1">Summary</p>
+                        <p class="text-sm text-slate-600 line-clamp-4">{{ candidate.summary || 'No summary extracted.' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-slate-700 mb-1">Education</p>
+                        <p class="text-sm text-slate-600 line-clamp-4">{{ candidate.education || 'No education extracted.' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-slate-700 mb-1">Experience</p>
+                        <p class="text-sm text-slate-600 line-clamp-6">{{ candidate.experience || 'No experience extracted.' }}</p>
+                    </div>
+                </div>
             </div>
-            <div class="w-1/6 pl-4 text-left">Medium</div>
         </div>
-        <div class="flex items-center w-full">
-            <div class="w-1/6 text-right pr-8">Numbers</div>
-            <div class="w-2/3">
-                <ProgressBar :value="100">10</ProgressBar>
-            </div>
-            <div class="w-1/6 pl-4 text-left">High</div>
+
+        <div v-else class="card col-span-12">
+            <p class="text-slate-600">There are no ranked candidates to display yet.</p>
         </div>
-        <div class="flex items-center w-full">
-            <div class="w-1/6 text-right pr-8">Words</div>
-            <div class="w-2/3">
-                <ProgressBar :value="80">8</ProgressBar>
-            </div>
-            <div class="w-1/6 pl-4 text-left">High</div>
-        </div>
-        <div class="flex items-center w-full">
-            <div class="w-1/6 text-right pr-8">Shapes</div>
-            <div class="w-2/3">
-                <ProgressBar :value="30">3</ProgressBar>
-            </div>
-            <div class="w-1/6 pl-4 text-left">Low</div>
+
+        <div v-if="failedFiles.length > 0" class="card col-span-12">
+            <h2 class="text-lg font-semibold text-slate-900 mb-3">Failed Files</h2>
+            <ul class="space-y-2">
+                <li v-for="item in failedFiles" :key="item.file_name" class="text-sm text-slate-600">
+                    <span class="font-medium text-slate-900">{{ item.file_name }}</span>
+                    <span> - {{ item.error }}</span>
+                </li>
+            </ul>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { computed, ref } from 'vue';
 
-onMounted(() => {
-    chartData.value = setChartData();
-    chartOptions.value = setChartOptions();
-});
+const analysis = ref(null);
 
-const chartData = ref();
-const chartOptions = ref();
-        
-const setChartData = () => {
-    const documentStyle = getComputedStyle(document.documentElement);
-    const textColor = documentStyle.getPropertyValue('--p-text-color');
+const loadAnalysis = () => {
+    const stored = sessionStorage.getItem('cohr_analysis_result');
 
-    return {
-        labels: ['Eating', 'Drinking', 'Sleeping', 'Designing', 'Coding', 'Cycling', 'Running'],
-        datasets: [
-            {
-                label: 'Required Skills',
-                borderColor: documentStyle.getPropertyValue('--p-gray-400'),
-                pointBackgroundColor: documentStyle.getPropertyValue('--p-gray-400'),
-                pointBorderColor: documentStyle.getPropertyValue('--p-gray-400'),
-                pointHoverBackgroundColor: textColor,
-                pointHoverBorderColor: documentStyle.getPropertyValue('--p-gray-400'),
-                data: [65, 59, 90, 81, 56, 55, 40]
-            },
-            {
-                label: 'Actual Skills',
-                borderColor: documentStyle.getPropertyValue('--p-pink-400'),
-                pointBackgroundColor: documentStyle.getPropertyValue('--p-pink-400'),
-                pointBorderColor: documentStyle.getPropertyValue('--p-pink-400'),
-                pointHoverBackgroundColor: textColor,
-                pointHoverBorderColor: documentStyle.getPropertyValue('--p-pink-400'),
-                data: [28, 48, 40, 19, 96, 27, 100]
-            }
-        ]
-    };
+    if (!stored) {
+        analysis.value = null;
+        return;
+    }
+
+    try {
+        analysis.value = JSON.parse(stored);
+    } catch (error) {
+        console.error('Failed to parse analysis result:', error);
+        analysis.value = null;
+    }
 };
-const setChartOptions = () => {
-    const documentStyle = getComputedStyle(document.documentElement);
-    const textColor = documentStyle.getPropertyValue('--p-text-color');
-    const textColorSecondary = documentStyle.getPropertyValue('--p-text-muted-color');
 
-    return {
-        plugins: {
-            legend: {
-                labels: {
-                    color: textColor
-                }
-            }
-        },
-        scales: {
-            r: {
-                grid: {
-                    color: textColorSecondary
-                }
-            }
-        }
-    };
-}
+loadAnalysis();
+
+const candidates = computed(() => analysis.value?.candidates || []);
+const failedFiles = computed(() => analysis.value?.failed_files || []);
+const jobDescription = computed(() => analysis.value?.job_description || '');
+const totalCandidates = computed(() => analysis.value?.total || candidates.value.length || 0);
 </script>

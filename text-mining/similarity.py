@@ -1,66 +1,138 @@
-import math
 import re
-from collections import Counter
+import nltk
 
-try:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.metrics.pairwise import cosine_similarity
-    SKLEARN_AVAILABLE = True
-except Exception:
-    SKLEARN_AVAILABLE = False
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+
+from extractor import extract_skills_with_skillner, normalize_skill_name
 
 
-STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "in",
-    "is", "it", "of", "on", "or", "that", "the", "to", "was", "were", "with",
+nltk.download("stopwords", quiet=True)
+nltk.download("wordnet", quiet=True)
+
+STOPWORDS = set(stopwords.words("english"))
+lemmatizer = WordNetLemmatizer()
+
+_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+
+SECTION_WEIGHTS = {
+    "experience": 4,
+    "projects": 3,
+    "skills_section": 3,
+    "summary": 2,
+    "certifications": 2,
+    "education": 1,
 }
 
 
-def _tokenize(text):
+def clean_skill(skill):
+    return normalize_skill_name(skill)
+
+
+def tokenize(text):
+    if not text:
+        return []
+
     words = re.findall(r"[a-zA-Z][a-zA-Z0-9+#.-]*", text.lower())
-    return [word for word in words if word not in STOPWORDS]
+
+    tokens = []
+    for word in words:
+        if word not in STOPWORDS and len(word) > 2:
+            tokens.append(lemmatizer.lemmatize(word))
+
+    return tokens
 
 
-def _cosine_counter(a, b):
-    if not a or not b:
-        return 0.0
+def build_weighted_candidate_text(resume):
+    """
+    Build candidate profile text with weighted sections.
 
-    keys = set(a) & set(b)
-    dot = sum(a[key] * b[key] for key in keys)
-    norm_a = math.sqrt(sum(value * value for value in a.values()))
-    norm_b = math.sqrt(sum(value * value for value in b.values()))
+    Experience is repeated more times because it should matter more
+    than education for job matching.
+    """
 
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
+    parts = []
 
-    return dot / (norm_a * norm_b)
+    for section, weight in SECTION_WEIGHTS.items():
+        text = resume.get(section, "")
+
+        if text:
+            parts.extend([text] * weight)
+
+    skills = resume.get("extracted_skills", [])
+
+    if isinstance(skills, list):
+        skills_text = " ".join(skills)
+        parts.extend([skills_text] * 3)
+
+    return " ".join(parts)
 
 
-def calculate_similarity(job_description, resumes):
-    if SKLEARN_AVAILABLE:
-        documents = [job_description] + [resume["full_text"] for resume in resumes]
+def calculate_skill_overlap(job_skills, candidate_skills):
+    job_skills = {clean_skill(skill) for skill in job_skills}
+    candidate_skills = {clean_skill(skill) for skill in candidate_skills}
 
-        vectorizer = TfidfVectorizer(
-            lowercase=True,
-            stop_words="english",
-            ngram_range=(1, 2)
+    if not job_skills:
+        return 0.0, []
+
+    matched_skills = sorted(job_skills.intersection(candidate_skills))
+
+    score = len(matched_skills) / len(job_skills)
+
+    return score, matched_skills
+
+
+def calculate_similarity(
+    job_description,
+    resumes,
+    embedding_weight=0.30,
+    skill_weight=0.55
+):
+    """
+    Hybrid score:
+
+    Final score =
+    55% SBERT semantic similarity
+    + 45% normalized skill overlap
+
+    SBERT compares the overall meaning of the job description and candidate.
+    Skill overlap checks whether the candidate has the required technical skills.
+    It is weighted higher because short job descriptions are usually mostly
+    requirements, while resume embeddings can over-reward generally similar CVs.
+    """
+
+    job_skills = extract_skills_with_skillner(job_description)
+
+    job_embedding = _model.encode([job_description])
+
+    for resume in resumes:
+        candidate_text = build_weighted_candidate_text(resume)
+
+        candidate_embedding = _model.encode([candidate_text])
+
+        embedding_score = cosine_similarity(
+            job_embedding,
+            candidate_embedding
+        )[0][0]
+
+        skill_score, matched_skills = calculate_skill_overlap(
+            job_skills,
+            resume.get("extracted_skills", [])
         )
 
-        tfidf_matrix = vectorizer.fit_transform(documents)
+        final_score = (
+            embedding_weight * embedding_score
+            + skill_weight * skill_score
+        )
 
-        job_vector = tfidf_matrix[0]
-        resume_vectors = tfidf_matrix[1:]
-
-        scores = cosine_similarity(job_vector, resume_vectors).flatten()
-    else:
-        job_vector = Counter(_tokenize(job_description))
-        scores = []
-        for resume in resumes:
-            resume_vector = Counter(_tokenize(resume["full_text"]))
-            scores.append(_cosine_counter(job_vector, resume_vector))
-
-    for resume, score in zip(resumes, scores):
-        resume["similarity_score"] = round(score * 100, 2)
+        resume["embedding_score"] = round(float(embedding_score) * 100, 2)
+        resume["skill_score"] = round(float(skill_score) * 100, 2)
+        resume["similarity_score"] = round(float(final_score) * 100, 2)
+        resume["matched_skills"] = matched_skills
+        resume["job_skills"] = job_skills
 
     ranked_resumes = sorted(
         resumes,

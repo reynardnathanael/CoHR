@@ -1,10 +1,10 @@
 from load import load_pdf_files
 from parser import parse_pdf_with_docling
-from extractor import parse_resume_info
+from extractor import extract_resume_info
 from similarity import calculate_similarity
 
 
-DATA_DIR = "/home/bella/Code/CoHR/data/pdf"
+DATA_DIR = "/Users/annabellaputridirgo/Personal/Class2-TM/Assignments/talentmatch/data/test"
 
 
 job_description = """
@@ -24,10 +24,13 @@ def main():
 
         raw_text = parse_pdf_with_docling(pdf_file)
 
-        resume_info = parse_resume_info(
-            file_name=pdf_file.name,
-            raw_text=raw_text
-        )
+        print("\n===== RAW TEXT DEBUG =====")
+        print(raw_text[:1000])
+        print("===== END RAW TEXT DEBUG =====\n")
+
+        resume_info = extract_resume_info(raw_text)
+        resume_info["file_name"] = pdf_file.name
+        resume_info["full_text"] = raw_text
 
         resumes.append(resume_info)
 
@@ -38,10 +41,25 @@ def main():
     for idx, resume in enumerate(ranked_resumes, start=1):
         print(f"\nRank {idx}")
         print("File:", resume["file_name"])
-        print("Similarity Score:", resume["similarity_score"], "%")
+        print("Final Score:", resume["similarity_score"], "%")
+        print("Embedding Score:", resume["embedding_score"], "%")
+        print("Skill Match Score:", resume["skill_score"], "%")
+        print("Matched Skills:", resume["matched_skills"])
+        print("Email:", resume.get("email", ""))
+        print("Phone Number:", resume.get("phone_number", ""))
+        print("Location:", resume.get("location", ""))
         print("Skills:", resume["extracted_skills"])
-        print("Education:", resume["education"][:300])
-        print("Experience Preview:", resume["experience"][:500])
+        print("Education:", resume.get("education", "")[:300])
+        print("Experience Preview:", resume.get("experience", "")[:500])
+
+        if not resume.get("email"):
+            print("WARNING: Email was not extracted. Check whether the email appears in RAW TEXT DEBUG above.")
+
+        if not resume.get("phone_number"):
+            print("WARNING: Phone number was not extracted. Check whether the phone appears in RAW TEXT DEBUG above.")
+
+        if not resume.get("experience"):
+            print("WARNING: Experience section was not extracted. Check the exact heading name in RAW TEXT DEBUG above.")
 
 
 if __name__ == "__main__":

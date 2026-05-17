@@ -1,45 +1,93 @@
 import os
+import sys
 import tempfile
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from pathlib import Path
+
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from docling.document_converter import DocumentConverter
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TEXT_MINING_DIR = REPO_ROOT / "text-mining"
+
+if str(TEXT_MINING_DIR) not in sys.path:
+    sys.path.insert(0, str(TEXT_MINING_DIR))
+
+from extractor import extract_resume_info
+from parser import parse_pdf_with_docling
+from web_runner import build_output
+
 
 app = FastAPI()
 
-# Configure CORS for your Vue.js + Vite frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Change this to your Vite local server URL (e.g., "http://localhost:5173") in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize the Docling DocumentConverter
-converter = DocumentConverter()
+
+def _save_upload_to_temp_file(file: UploadFile, content: bytes) -> str:
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(content)
+        return tmp_file.name
+
 
 @app.post("/api/parse-pdf")
 async def parse_pdf(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+    tmp_path = None
 
-    # Save the uploaded file temporarily so Docling can process it from the file path
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_file.write(await file.read())
-            tmp_path = tmp_file.name
-
-        # Convert the document using Docling
-        result = converter.convert(tmp_path)
-        markdown_output = result.document.export_to_markdown()
+        tmp_path = _save_upload_to_temp_file(file, await file.read())
+        raw_text = parse_pdf_with_docling(tmp_path)
+        extracted = extract_resume_info(raw_text)
+        extracted["file_name"] = file.filename
+        extracted["full_text"] = raw_text
 
         return {
             "filename": file.filename,
-            "content": markdown_output
+            "content": raw_text,
+            "extracted": extracted,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        # Ensure the temporary file is deleted after processing
-        if 'tmp_path' in locals() and os.path.exists(tmp_path):
+        if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+@app.post("/api/analyze-resumes")
+async def analyze_resumes(
+    job_description: str = Form(""),
+    files: list[UploadFile] = File(...),
+):
+    tmp_paths = []
+
+    try:
+        for file in files:
+            tmp_paths.append(_save_upload_to_temp_file(file, await file.read()))
+
+        if not tmp_paths:
+            raise HTTPException(
+                status_code=400,
+                detail="Upload at least one PDF resume.",
+            )
+
+        output = build_output(job_description, tmp_paths)
+        output["job_description"] = job_description
+        return output
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        for tmp_path in tmp_paths:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
