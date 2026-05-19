@@ -1,9 +1,9 @@
 <template>
     <div class="grid grid-cols-12 gap-8">
-        <div class="card col-span-12">
+        <div class="card col-span-12 xl:col-span-7">
             <div class="px-4 mt-3 w-full rounded-2xl bg-indigo-900">
                 <p class="text-white text-lg pt-3 font-semibold">Upload a CV or Resume</p>
-                <FileUpload @select="onFileSelect" :showUploadButton="false" ref="fileUpload" name="files" :multiple="true" accept="application/pdf" :auto="false" style="border: 0;" class="bg-indigo-900">
+                <FileUpload @select="updateFileCount" @remove="updateFileCount" @clear="updateFileCount" :showUploadButton="false" ref="fileUpload" name="files" :multiple="true" accept="application/pdf" :auto="false" style="border: 0;" class="bg-indigo-900">
                     <template #empty>
                         <div class="flex justify-center items-center space-x-4 border-2 py-4 border-dashed rounded-2xl" style="border-color: #1C1C1C;">
                             <!-- <i class="pi pi-cloud-upload !text-4xl" /> -->
@@ -29,7 +29,7 @@
                 <p class="text-white py-3 text-sm">Upload one or more PDF resumes</p>
             </div>
             <div class="my-8 flex justify-center">
-                <Select v-model="selectedCountry" :options="roles" filter optionLabel="name" placeholder="Select job position" class="w-full">
+                <Select v-model="selectedRole" :options="roles" filter optionLabel="name" placeholder="Select job position" class="w-full">
                     <template #value="slotProps">
                         <div v-if="slotProps.value" class="flex items-center">
                             <div>{{ slotProps.value.name }}</div>
@@ -53,7 +53,7 @@
                 <Button :loading="loading" class="w-40 !bg-indigo-200 !text-black !border-indigo-900" type="button" label="Submit" icon="pi pi-upload" iconPos="right" @click="createPostFile" style="border-radius: 16px;"></Button>
             </div>
         </div>
-        <div class="card col-span-12 lg:col-span-7">
+        <div class="card col-span-12 xl:col-span-5">
             <div class="flex flex-col gap-1">
                 <label for="result" class="text-lg font-medium">Result</label>
                 <Textarea class="text-justify" id="result" v-model="result" rows="5" fluid autoResize readonly />
@@ -69,10 +69,11 @@ import { useRouter } from "vue-router";
 
 const fileUpload = ref();
 const router = useRouter();
-const selectedCountry = ref();
+const selectedRole = ref();
 const jobDescription = ref("Cras nec velit aliquet, tempus velit eu, luctus lacus. Nulla vulputate lacus nisl, accumsan tristique magna rutrum id. Sed nisi magna, cursus vel velit eget, maximus cursus lacus. Donec non libero magna. Vestibulum vitae finibus ante. Praesent sit amet turpis faucibus, posuere augue a, posuere nisl. Donec ut enim varius, porttitor ligula in, accumsan neque. Etiam vel convallis lorem. Aliquam erat volutpat. Vestibulum gravida urna quis dolor ornare, ullamcorper condimentum justo aliquet. In ligula tortor, posuere accumsan diam id, vestibulum porta metus. Praesent eget imperdiet eros. \n\nCurabitur non quam sed magna tincidunt iaculis nec ac felis. Quisque pulvinar ligula neque, vitae hendrerit felis hendrerit ac. Vivamus nec vehicula elit, sit amet condimentum quam. Morbi quis orci ac massa semper congue. Aliquam eget imperdiet nibh, vel bibendum neque. Etiam sit amet massa ut sem feugiat euismod. Maecenas convallis mollis libero, a bibendum risus placerat nec. Praesent blandit faucibus neque vitae convallis. Nam sed ornare augue.Proin eu ullamcorper orci. In at erat nibh. Vestibulum a turpis sapien. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.");
 const loading = ref(false);
-const result = ref("Select one or more resumes and submit to rank them against the chosen job description.");
+const defaultResultText = "Select one or more resumes and submit to rank them against the chosen job description.";
+const result = ref(defaultResultText);
 
 const defaultJobDescription = jobDescription.value;
 const roleDescriptions = {
@@ -105,18 +106,26 @@ const roles = ref([
     { name: 'Customer Support Representative' },    
 ]);
 
-watch(selectedCountry, (role) => {
+watch(selectedRole, (role) => {
     const roleName = role?.name;
     jobDescription.value = roleName && roleDescriptions[roleName]
         ? roleDescriptions[roleName]
         : defaultJobDescription;
 });
 
-const onFileSelect = (event) => {
-    const files = event?.files ?? [];
+const updateFileCount = () => {
+    const files = fileUpload.value?.files || [];
     result.value = files.length > 0
         ? `${files.length} file(s) ready for analysis.`
-        : 'Select one or more resumes and submit to rank them.';
+        : defaultResultText;
+};
+
+const formatSize = (bytes) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
 const createPostFile = async () => {

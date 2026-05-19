@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import List
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,12 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TEXT_MINING_DIR = REPO_ROOT / "text-mining"
 
 if str(TEXT_MINING_DIR) not in sys.path:
-    sys.path.insert(0, str(TEXT_MINING_DIR))
-
-from extractor import extract_resume_info
-from parser import parse_pdf_with_docling
-from web_runner import build_output
-
+    sys.path.append(str(TEXT_MINING_DIR))
 
 app = FastAPI()
 
@@ -27,6 +23,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from extractor import extract_resume_info
+from parser import parse_pdf_with_docling
+from web_runner import build_output
 
 
 def _save_upload_to_temp_file(file: UploadFile, content: bytes) -> str:
@@ -66,7 +66,7 @@ async def parse_pdf(file: UploadFile = File(...)):
 @app.post("/api/analyze-resumes")
 async def analyze_resumes(
     job_description: str = Form(""),
-    files: list[UploadFile] = File(...),
+    files: List[UploadFile] = File(...),
 ):
     tmp_paths = []
 
