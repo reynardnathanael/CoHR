@@ -128,6 +128,71 @@ const formatSize = (bytes) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
+const normalizeTextArray = (value) => {
+    if (Array.isArray(value)) {
+        return value.filter(Boolean);
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+        return [value.trim()];
+    }
+
+    return [];
+};
+
+const formatLocation = (value) => {
+    if (!value) {
+        return '';
+    }
+
+    if (typeof value === 'string') {
+        return value.trim();
+    }
+
+    if (Array.isArray(value)) {
+        return value
+            .map((entry) => formatLocation(entry))
+            .filter(Boolean)
+            .join(', ');
+    }
+
+    if (typeof value === 'object') {
+        const parts = [
+            value.location,
+            value.city,
+            value.state,
+            value.region,
+            value.country,
+            value.name,
+        ].filter((part) => typeof part === 'string' && part.trim());
+
+        return parts.join(', ');
+    }
+
+    return '';
+};
+
+const normalizeCandidate = (candidate) => ({
+    ...candidate,
+    location: formatLocation(
+        candidate?.location ||
+        candidate?.extracted_location ||
+        candidate?.contact?.location ||
+        candidate?.contact?.city ||
+        candidate?.city ||
+        candidate?.country
+    ),
+    matched_skills: normalizeTextArray(candidate?.matched_skills),
+    extracted_skills: normalizeTextArray(candidate?.extracted_skills),
+});
+
+const normalizeAnalysisResult = (payload) => ({
+    ...payload,
+    candidates: Array.isArray(payload?.candidates)
+        ? payload.candidates.map(normalizeCandidate)
+        : [],
+});
+
 const createPostFile = async () => {
     if (!fileUpload.value || fileUpload.value.files.length === 0) {
         alert("Please select at least one PDF file first.");
@@ -147,9 +212,10 @@ const createPostFile = async () => {
 
     try {
         const response = await api.post('/analyze-resumes', formData);
+        const normalizedResult = normalizeAnalysisResult(response.data);
 
-        sessionStorage.setItem('cohr_analysis_result', JSON.stringify(response.data));
-        result.value = `Analysis complete. Ranked ${response.data.total} candidate(s).`;
+        sessionStorage.setItem('cohr_analysis_result', JSON.stringify(normalizedResult));
+        result.value = `Analysis complete. Ranked ${normalizedResult.total} candidate(s).`;
         await router.push('/result');
     } catch (error) {
         console.error("Error uploading resumes:", error);

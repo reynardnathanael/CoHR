@@ -39,6 +39,9 @@ def build_output(job_description, file_paths):
             {
                 "file_name": resume.get("file_name", ""),
                 "similarity_score": resume.get("similarity_score", 0.0),
+                "embedding_score": resume.get("embedding_score", 0.0),
+                "skill_score": resume.get("skill_score", 0.0),
+                "matched_skills": resume.get("matched_skills", []),
                 "extracted_skills": resume.get("extracted_skills", []),
                 "education": resume.get("education", ""),
                 "experience": resume.get("experience", ""),

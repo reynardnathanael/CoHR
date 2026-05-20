@@ -11,6 +11,7 @@ except Exception:
     SKILL_DB = None
     SkillExtractor = None
 
+
 warnings.filterwarnings("ignore", message=r"\[W008\]")
 
 try:
@@ -23,10 +24,12 @@ except Exception:
         if "sentencizer" not in _nlp.pipe_names:
             _nlp.add_pipe("sentencizer")
 
+
 if SkillExtractor is not None and SKILL_DB is not None:
     _skill_extractor = SkillExtractor(_nlp, SKILL_DB, PhraseMatcher)
 else:
     _skill_extractor = None
+
 
 EMAIL_PATTERN = re.compile(
     r"(?<![\w.+-])([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})(?![\w.+-])"
@@ -43,6 +46,7 @@ PHONE_PATTERN = re.compile(
     re.VERBOSE,
 )
 
+
 NOISY_SKILLS = {
     "a", "b", "c", "e", "m", "com", "gmail", "github", "linkedin",
     "license", "managed", "presenting", "programming", "storage",
@@ -51,6 +55,7 @@ NOISY_SKILLS = {
     "article", "self care", "targets", "business e", "design",
     "effectively managed", "monitored system",
 }
+
 
 TECH_SKILL_ALIASES = {
     "sql": ["sql", "structured query language"],
@@ -85,11 +90,13 @@ TECH_SKILL_ALIASES = {
     "civil engineering": ["civil engineering"],
 }
 
+
 ALIAS_TO_CANONICAL = {
     alias: canonical
     for canonical, aliases in TECH_SKILL_ALIASES.items()
     for alias in aliases
 }
+
 
 SECTION_ALIASES = {
     "summary": [
@@ -126,6 +133,7 @@ SECTION_ALIASES = {
     ],
 }
 
+
 INLINE_SECTION_HEADINGS = sorted(
     {
         alias
@@ -137,6 +145,40 @@ INLINE_SECTION_HEADINGS = sorted(
 )
 
 
+LOCATION_BAD_KEYWORDS = {
+    "curriculum vitae", "resume", "cv", "personal", "information",
+    "personal information", "contact", "contact information",
+    "summary", "profile", "skills", "education", "experience",
+    "projects", "certifications", "certificates", "github",
+    "linkedin", "portfolio"
+}
+
+LOCATION_SIGNAL_WORDS = {
+    "remote", "hybrid", "onsite", "on-site"
+}
+
+
+def add_line_breaks_before_inline_sections(text):
+    for heading in INLINE_SECTION_HEADINGS:
+        variants = {heading.upper(), heading.title()}
+
+        for variant in variants:
+            pattern = rf"(?<!\n)(?<![A-Za-z])({re.escape(variant)})(?![A-Za-z])"
+            text = re.sub(pattern, lambda m: "\n" + m.group(1) + "\n", text)
+
+        if len(heading.split()) > 1:
+            pattern = rf"(?<!\n)(?<![A-Za-z])({re.escape(heading)})(?![A-Za-z])"
+            text = re.sub(
+                pattern,
+                lambda m: "\n" + m.group(1) + "\n",
+                text,
+                flags=re.IGNORECASE,
+            )
+
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text
+
+
 def clean_text(text):
     text = html.unescape(text or "")
 
@@ -145,9 +187,6 @@ def clean_text(text):
     text = text.replace("«", "-")
     text = text.replace("•", "\n• ")
     text = text.replace("®", "")
-
-    # Important: do not replace or remove "@" here.
-    # Removing it breaks email extraction.
 
     text = add_line_breaks_before_inline_sections(text)
 
@@ -158,35 +197,6 @@ def clean_text(text):
     text = re.sub(r"\n{3,}", "\n\n", text)
 
     return text.strip()
-
-
-def add_line_breaks_before_inline_sections(text):
-    """
-    Some PDF extractors return the whole resume as one line.
-    This function puts likely section headings onto their own lines.
-    """
-    for heading in INLINE_SECTION_HEADINGS:
-        variants = {heading.upper(), heading.title()}
-
-        for variant in variants:
-            pattern = rf"(?<!\n)(?<![A-Za-z])({re.escape(variant)})(?![A-Za-z])"
-            text = re.sub(
-                pattern,
-                lambda match: "\n" + match.group(1) + "\n",
-                text,
-            )
-
-        if len(heading.split()) > 1:
-            pattern = rf"(?<!\n)(?<![A-Za-z])({re.escape(heading)})(?![A-Za-z])"
-            text = re.sub(
-                pattern,
-                lambda match: "\n" + match.group(1) + "\n",
-                text,
-                flags=re.IGNORECASE,
-            )
-
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text
 
 
 def normalize_line(line):
@@ -219,6 +229,17 @@ def detect_section(line):
     return None
 
 
+def clean_section_text(text):
+    text = html.unescape(text or "")
+
+    if "@" not in text:
+        text = re.sub(r"(?<=\w)([A-Z][a-z]+)", r" \1", text)
+
+    text = re.sub(r"\s+", " ", text)
+    text = text.replace(" - ", " • ")
+    return text.strip()
+
+
 def extract_sections(text):
     text = clean_text(text)
     lines = text.splitlines()
@@ -247,18 +268,6 @@ def extract_sections(text):
     }
 
 
-def clean_section_text(text):
-    text = html.unescape(text or "")
-
-    # Add space between camel-case words, but avoid touching emails.
-    if "@" not in text:
-        text = re.sub(r"(?<=\w)([A-Z][a-z]+)", r" \1", text)
-
-    text = re.sub(r"\s+", " ", text)
-    text = text.replace(" - ", " • ")
-    return text.strip()
-
-
 def normalize_contact_text(text):
     if not text:
         return ""
@@ -280,8 +289,6 @@ def normalize_contact_text(text):
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    # Fix emails broken by PDF extraction, such as:
-    # name @ gmail . com -> name@gmail.com
     text = re.sub(r"\s*@\s*", "@", text)
     text = re.sub(r"\s*\.\s*", ".", text)
 
@@ -293,8 +300,8 @@ def extract_email(text):
         return ""
 
     normalized_text = normalize_contact_text(text)
-
     match = EMAIL_PATTERN.search(normalized_text)
+
     return match.group(1) if match else ""
 
 
@@ -302,7 +309,6 @@ def extract_phone_number(text):
     if not text:
         return ""
 
-    # Keep the original text first because some phone numbers contain spaces.
     match = PHONE_PATTERN.search(text)
 
     if match:
@@ -310,8 +316,6 @@ def extract_phone_number(text):
         phone = re.sub(r"\s+", " ", phone)
         return phone.strip("-.,;: ")
 
-    # Fallback: handle phone numbers broken by PDF extraction.
-    # This keeps digits and common phone symbols only.
     phone_like_text = re.sub(r"[^0-9+()\s.\-]", " ", text)
     phone_like_text = re.sub(r"\s+", " ", phone_like_text)
 
@@ -322,12 +326,11 @@ def extract_phone_number(text):
 
     phone = match.group(0).strip()
     phone = re.sub(r"\s+", " ", phone)
+
     return phone.strip("-.,;: ")
+
+
 def fix_missing_sections(sections, raw_text):
-    """
-    Fallback for resumes where the PDF parser keeps headings in strange formats.
-    If experience is empty, try to recover likely experience text from raw text.
-    """
     if sections.get("experience"):
         return sections
 
@@ -357,6 +360,7 @@ def fix_missing_sections(sections, raw_text):
             continue
 
         detected_section = detect_section(line)
+
         if detected_section and detected_section != "experience":
             break
 
@@ -371,48 +375,99 @@ def fix_missing_sections(sections, raw_text):
     return sections
 
 
+def clean_location_candidate(line):
+    line = html.unescape(line or "").strip()
+
+    # Remove OCR/icon noise at the beginning of the line.
+    line = re.sub(r"^[^\w@+]*[📍½⌂🏠🌐]?\s*", "", line)
+
+    line = re.sub(r"\s+", " ", line)
+    line = line.strip(" |•-–—,:;")
+
+    return line
+
+
+def is_bad_location_candidate(line):
+    lowered = line.lower().strip()
+
+    if not line or len(line) < 3:
+        return True
+
+    if any(keyword in lowered for keyword in LOCATION_BAD_KEYWORDS):
+        return True
+
+    if "@" in line:
+        return True
+
+    if EMAIL_PATTERN.search(line):
+        return True
+
+    if PHONE_PATTERN.search(line):
+        return True
+
+    if "http" in lowered or "www." in lowered:
+        return True
+
+    if len(line.split()) > 6:
+        return True
+
+    return False
+
+
+def looks_like_location_format(line):
+    lowered = line.lower().strip()
+
+    if lowered in LOCATION_SIGNAL_WORDS:
+        return True
+
+    # City, Country / City, State
+    if re.match(r"^[A-Za-zÀ-ÖØ-öø-ÿ .'-]+,\s*[A-Za-zÀ-ÖØ-öø-ÿ .'-]+$", line):
+        return True
+
+    # City | Country or City - Country
+    if re.match(r"^[A-Za-zÀ-ÖØ-öø-ÿ .'-]+\s*[\|/–-]\s*[A-Za-zÀ-ÖØ-öø-ÿ .'-]+$", line):
+        return True
+
+    return False
+
+
 def extract_location(text):
     if not text:
         return ""
 
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    candidate_lines = []
+    cleaned_text = clean_text(text)
+    lines = [line.strip() for line in cleaned_text.splitlines() if line.strip()]
 
-    for line in lines[:8]:
-        lowered = line.lower()
+    header_text = "\n".join(lines[:30])
+    doc = _nlp(header_text)
 
-        if "@" in line or "linkedin" in lowered or "github" in lowered:
-            continue
+    candidates = []
 
-        if PHONE_PATTERN.search(line) or EMAIL_PATTERN.search(line):
-            continue
-
-        if re.search(r"\b(remote|hybrid|onsite)\b", lowered):
-            candidate_lines.append(line)
-            continue
-
-        if re.search(r"^[A-Za-z .'-]+,\s*[A-Za-z .'-]{2,}$", line):
-            candidate_lines.append(line)
-
-    if candidate_lines:
-        return candidate_lines[0]
-
-    doc = _nlp("\n".join(lines[:12]))
-    entities = []
-
+    # 1. NER-first approach
     for ent in doc.ents:
         if ent.label_ in {"GPE", "LOC"}:
-            value = ent.text.strip()
-            if value and value not in entities:
-                entities.append(value)
+            candidate = clean_location_candidate(ent.text)
 
-    if not entities:
-        return ""
+            if is_bad_location_candidate(candidate):
+                continue
 
-    if len(entities) == 1:
-        return entities[0]
+            if candidate not in candidates:
+                candidates.append(candidate)
 
-    return ", ".join(entities[:2])
+    if candidates:
+        return candidates[0]
+
+    # 2. Fallback for common resume location formats
+    for line in lines[:25]:
+        candidate = clean_location_candidate(line)
+
+        if is_bad_location_candidate(candidate):
+            continue
+
+        if looks_like_location_format(candidate):
+            return candidate
+
+    return ""
 
 
 def normalize_skill_name(skill):
@@ -452,6 +507,7 @@ def normalize_skill_search_text(text):
     text = text.replace("|", " ")
     text = re.sub(r"(?<=\w)-(?=\w)", " ", text)
     text = re.sub(r"\s+", " ", text)
+
     return text
 
 
@@ -494,6 +550,7 @@ def extract_skills_with_skillner(text):
             skills.add(skill)
 
     skills.update(extract_skills_with_aliases(text))
+
     return sorted(skills)
 
 
@@ -517,8 +574,6 @@ def extract_resume_info(text):
 
     extracted_skills = extract_skills_with_skillner(skillner_input)
 
-    # Extract contact information from the original raw text first.
-    # This is safer because cleaned section text may change spacing or symbols.
     contact_text = text or ""
 
     combined_contact_text = "\n".join([
@@ -530,7 +585,7 @@ def extract_resume_info(text):
 
     email = extract_email(combined_contact_text)
     phone_number = extract_phone_number(combined_contact_text)
-    location = extract_location(header_text or contact_text)
+    location = extract_location(combined_contact_text)
 
     return {
         "header": sections.get("header", ""),

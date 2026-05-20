@@ -4,7 +4,7 @@ from extractor import extract_resume_info
 from similarity import calculate_similarity
 
 
-DATA_DIR = "/Users/annabellaputridirgo/Personal/Class2-TM/Assignments/talentmatch/data/test"
+DATA_DIR = "data/test"
 
 
 job_description = """

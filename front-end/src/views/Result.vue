@@ -39,6 +39,14 @@
                         <p class="text-sm text-slate-500">
                             {{ candidate.location || 'Location not extracted' }}
                         </p>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                                Location: {{ candidate.location || 'Not found' }}
+                            </span>
+                            <span class="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-900">
+                                Skills: {{ candidate.matched_skills.length }} matched
+                            </span>
+                        </div>
                     </div>
 
                     <div class="rounded-2xl bg-indigo-50 px-4 py-3 text-right min-w-28">
@@ -48,17 +56,17 @@
                 </div>
 
                 <div class="grid grid-cols-3 gap-3 mt-5">
-                    <div class="rounded-xl bg-slate-50 p-3">
+                    <!-- <div class="rounded-xl bg-slate-50 p-3">
                         <p class="text-xs text-slate-500">Embedding</p>
                         <p class="text-lg font-semibold text-slate-900">{{ candidate.embedding_score ?? 0 }}%</p>
                     </div>
                     <div class="rounded-xl bg-slate-50 p-3">
                         <p class="text-xs text-slate-500">Skills</p>
                         <p class="text-lg font-semibold text-slate-900">{{ candidate.skill_score ?? 0 }}%</p>
-                    </div>
+                    </div> -->
                     <div class="rounded-xl bg-slate-50 p-3">
                         <p class="text-xs text-slate-500">Matched</p>
-                        <p class="text-lg font-semibold text-slate-900">{{ candidate.matched_skills?.length || 0 }}</p>
+                        <p class="text-lg font-semibold text-slate-900">{{ candidate.matched_skills.length }}</p>
                     </div>
                 </div>
 
@@ -66,14 +74,30 @@
                     <p class="text-sm font-semibold text-slate-700 mb-2">Matched Skills</p>
                     <div class="flex flex-wrap gap-2">
                         <span
-                            v-for="skill in candidate.matched_skills || []"
+                            v-for="skill in candidate.matched_skills"
                             :key="skill"
                             class="rounded-full bg-indigo-100 text-indigo-900 px-3 py-1 text-xs font-medium"
                         >
                             {{ skill }}
                         </span>
-                        <span v-if="!candidate.matched_skills || candidate.matched_skills.length === 0" class="text-sm text-slate-500">
+                        <span v-if="candidate.matched_skills.length === 0" class="text-sm text-slate-500">
                             No direct skill overlap detected.
+                        </span>
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <p class="text-sm font-semibold text-slate-700 mb-2">Extracted Skills</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span
+                            v-for="skill in candidate.extracted_skills"
+                            :key="skill"
+                            class="rounded-full bg-emerald-100 text-emerald-900 px-3 py-1 text-xs font-medium"
+                        >
+                            {{ skill }}
+                        </span>
+                        <span v-if="candidate.extracted_skills.length === 0" class="text-sm text-slate-500">
+                            No skills were extracted from this resume.
                         </span>
                     </div>
                 </div>
@@ -134,7 +158,65 @@ const loadAnalysis = () => {
 
 loadAnalysis();
 
-const candidates = computed(() => analysis.value?.candidates || []);
+const normalizeSkills = (value) => {
+    if (Array.isArray(value)) {
+        return value.filter(Boolean);
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+        return [value.trim()];
+    }
+
+    return [];
+};
+
+const formatLocation = (value) => {
+    if (!value) {
+        return '';
+    }
+
+    if (typeof value === 'string') {
+        return value.trim();
+    }
+
+    if (Array.isArray(value)) {
+        return value
+            .map((entry) => formatLocation(entry))
+            .filter(Boolean)
+            .join(', ');
+    }
+
+    if (typeof value === 'object') {
+        const parts = [
+            value.location,
+            value.city,
+            value.state,
+            value.region,
+            value.country,
+            value.name,
+        ].filter((part) => typeof part === 'string' && part.trim());
+
+        return parts.join(', ');
+    }
+
+    return '';
+};
+
+const normalizeCandidate = (candidate) => ({
+    ...candidate,
+    location: formatLocation(
+        candidate?.location ||
+        candidate?.extracted_location ||
+        candidate?.contact?.location ||
+        candidate?.contact?.city ||
+        candidate?.city ||
+        candidate?.country
+    ),
+    matched_skills: normalizeSkills(candidate?.matched_skills),
+    extracted_skills: normalizeSkills(candidate?.extracted_skills),
+});
+
+const candidates = computed(() => (analysis.value?.candidates || []).map(normalizeCandidate));
 const failedFiles = computed(() => analysis.value?.failed_files || []);
 const jobDescription = computed(() => analysis.value?.job_description || '');
 const totalCandidates = computed(() => analysis.value?.total || candidates.value.length || 0);
