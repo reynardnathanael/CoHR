@@ -1,1 +1,4 @@
 data/
+agents.md
+__pycache__/
+*.pyc

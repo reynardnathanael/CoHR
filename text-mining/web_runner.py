@@ -7,11 +7,13 @@ import warnings
 from pathlib import Path
 
 from extractor import extract_resume_info
+from agents import build_job_profile, screen_candidate
 from parser import parse_pdf_with_docling
 from similarity import calculate_similarity
 
 
 def build_output(job_description, file_paths):
+    job_profile = build_job_profile(job_description)
     resumes = []
     failed_files = []
 
@@ -35,6 +37,7 @@ def build_output(job_description, file_paths):
 
     candidates = []
     for resume in ranked_resumes:
+        screening = screen_candidate(job_profile, resume)
         candidates.append(
             {
                 "file_name": resume.get("file_name", ""),
@@ -43,6 +46,7 @@ def build_output(job_description, file_paths):
                 "skill_score": resume.get("skill_score", 0.0),
                 "matched_skills": resume.get("matched_skills", []),
                 "extracted_skills": resume.get("extracted_skills", []),
+                "screening": screening,
                 "education": resume.get("education", ""),
                 "experience": resume.get("experience", ""),
                 "summary": resume.get("summary", ""),
@@ -53,6 +57,7 @@ def build_output(job_description, file_paths):
         )
 
     return {
+        "job_profile": job_profile,
         "candidates": candidates,
         "total": len(candidates),
         "failed_files": failed_files,

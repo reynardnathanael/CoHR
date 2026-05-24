@@ -3,7 +3,7 @@ import nltk
 
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from extractor import extract_skills_with_skillner, normalize_skill_name
@@ -15,7 +15,34 @@ nltk.download("wordnet", quiet=True)
 STOPWORDS = set(stopwords.words("english"))
 lemmatizer = WordNetLemmatizer()
 
-_model = SentenceTransformer("all-MiniLM-L6-v2")
+_model = None
+_model_error = None
+
+
+def _load_embedding_model():
+    global _model, _model_error
+
+    if _model is not None or _model_error is not None:
+        return _model
+
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    except Exception as exc:
+        _model_error = exc
+        _model = None
+
+    return _model
+
+
+def _encode_texts(texts):
+    model = _load_embedding_model()
+    if model is not None:
+        return model.encode(texts)
+
+    vectorizer = TfidfVectorizer(stop_words="english")
+    return vectorizer.fit_transform(texts)
 
 
 SECTION_WEIGHTS = {
@@ -106,12 +133,12 @@ def calculate_similarity(
 
     job_skills = extract_skills_with_skillner(job_description)
 
-    job_embedding = _model.encode([job_description])
-
     for resume in resumes:
         candidate_text = build_weighted_candidate_text(resume)
 
-        candidate_embedding = _model.encode([candidate_text])
+        embeddings = _encode_texts([job_description, candidate_text])
+        job_embedding = embeddings[0]
+        candidate_embedding = embeddings[1]
 
         embedding_score = cosine_similarity(
             job_embedding,
