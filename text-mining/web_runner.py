@@ -12,7 +12,7 @@ from parser import parse_pdf_with_docling
 from similarity import calculate_similarity
 
 
-def build_output(job_description, file_paths):
+def build_fast_output(job_description, file_paths):
     job_profile = build_job_profile(job_description)
     resumes = []
     failed_files = []
@@ -37,7 +37,6 @@ def build_output(job_description, file_paths):
 
     candidates = []
     for resume in ranked_resumes:
-        screening = screen_candidate(job_profile, resume)
         candidates.append(
             {
                 "file_name": resume.get("file_name", ""),
@@ -46,9 +45,11 @@ def build_output(job_description, file_paths):
                 "skill_score": resume.get("skill_score", 0.0),
                 "matched_skills": resume.get("matched_skills", []),
                 "extracted_skills": resume.get("extracted_skills", []),
-                "screening": screening,
+                "screening": None,  # To be filled later via Progressive Rendering
                 "education": resume.get("education", ""),
                 "experience": resume.get("experience", ""),
+                "projects": resume.get("projects", ""),
+                "certifications": resume.get("certifications", ""),
                 "summary": resume.get("summary", ""),
                 "email": resume.get("email", ""),
                 "phone_number": resume.get("phone_number", ""),
@@ -62,6 +63,15 @@ def build_output(job_description, file_paths):
         "total": len(candidates),
         "failed_files": failed_files,
     }
+
+def build_output(job_description, file_paths):
+    """Legacy synchronous function that does both fast parsing and slow screening."""
+    output = build_fast_output(job_description, file_paths)
+    
+    for candidate in output["candidates"]:
+        candidate["screening"] = screen_candidate(output["job_profile"], candidate)
+        
+    return output
 
 
 def main():

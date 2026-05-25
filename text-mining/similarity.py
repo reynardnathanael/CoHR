@@ -137,8 +137,8 @@ def calculate_similarity(
         candidate_text = build_weighted_candidate_text(resume)
 
         embeddings = _encode_texts([job_description, candidate_text])
-        job_embedding = embeddings[0]
-        candidate_embedding = embeddings[1]
+        job_embedding = embeddings[0:1]
+        candidate_embedding = embeddings[1:2]
 
         embedding_score = cosine_similarity(
             job_embedding,

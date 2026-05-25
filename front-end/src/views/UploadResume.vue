@@ -208,14 +208,14 @@ const createPostFile = async () => {
     formData.append('job_description', jobDescription.value);
 
     loading.value = true;
-    result.value = 'Analyzing resumes...';
+    result.value = 'Extracting resume data...';
 
     try {
-        const response = await api.post('/analyze-resumes', formData);
+        const response = await api.post('/analyze-fast', formData);
         const normalizedResult = normalizeAnalysisResult(response.data);
 
         sessionStorage.setItem('cohr_analysis_result', JSON.stringify(normalizedResult));
-        result.value = `Analysis complete. Ranked ${normalizedResult.total} candidate(s).`;
+        result.value = `Extraction complete. Proceeding to score ${normalizedResult.total} candidate(s)...`;
         await router.push('/result');
     } catch (error) {
         console.error("Error uploading resumes:", error);

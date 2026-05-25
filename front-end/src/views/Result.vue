@@ -116,6 +116,54 @@
                         <p class="text-sm text-slate-600 line-clamp-6">{{ candidate.experience || 'No experience extracted.' }}</p>
                     </div>
                 </div>
+
+                <!-- AI AGENT PROGRESSIVE RENDERING SECTION -->
+                <div class="mt-6 rounded-2xl bg-indigo-50/50 border border-indigo-100 p-5 relative overflow-hidden">
+                    <h3 class="text-base font-bold text-indigo-900 mb-4 flex items-center gap-2">
+                        <i class="pi pi-sparkles text-indigo-500"></i> AI Agent Evaluation (ARIA)
+                    </h3>
+
+                    <!-- Loading State -->
+                    <div v-if="candidate.agentLoading" class="flex flex-col items-center justify-center py-6 text-indigo-400">
+                        <i class="pi pi-spin pi-spinner text-4xl mb-3"></i>
+                        <p class="text-sm font-medium animate-pulse">ARIA is analyzing candidate fit...</p>
+                    </div>
+
+                    <!-- Result State -->
+                    <div v-else-if="candidate.screening && !candidate.screening.error" class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <span :class="{
+                                'bg-emerald-100 text-emerald-800': candidate.screening.fit_category === 'Strong Fit',
+                                'bg-amber-100 text-amber-800': candidate.screening.fit_category === 'Potential Fit',
+                                'bg-red-100 text-red-800': candidate.screening.fit_category === 'Weak Fit'
+                            }" class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                                {{ candidate.screening.fit_category }}
+                            </span>
+                            <span class="text-sm font-bold text-slate-700">
+                                Confidence: {{ candidate.screening.score }}%
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-1 gap-4">
+                            <div>
+                                <p class="text-xs font-bold text-slate-500 uppercase mb-2">Strengths & Weaknesses</p>
+                                <ul class="list-disc pl-4 text-sm text-slate-700 space-y-1 mb-2">
+                                    <li v-for="s in candidate.screening.strengths" :key="s" class="text-emerald-700">{{ s }}</li>
+                                    <li v-for="w in candidate.screening.weaknesses" :key="w" class="text-red-700">{{ w }}</li>
+                                </ul>
+                                <p class="text-sm mt-3 pt-3 border-t border-indigo-100">
+                                    <span class="font-bold text-slate-700">Recommendation:</span>
+                                    <span class="text-slate-600 ml-2">{{ candidate.screening.recommendation }}</span>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Error State -->
+                    <div v-else class="text-sm text-red-500 font-medium">
+                        {{ candidate.screening?.error || 'Failed to load AI evaluation. Ensure Ollama is running.' }}
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -136,27 +184,33 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
+import { api } from "../helpers/axios";
 
 const analysis = ref(null);
+const candidates = ref([]);
+const jobProfile = computed(() => analysis.value?.job_profile || {});
 
 const loadAnalysis = () => {
     const stored = sessionStorage.getItem('cohr_analysis_result');
 
     if (!stored) {
         analysis.value = null;
+        candidates.value = [];
         return;
     }
 
     try {
         analysis.value = JSON.parse(stored);
+        candidates.value = (analysis.value?.candidates || []).map(c => ({
+            ...normalizeCandidate(c),
+            agentLoading: !c.screening // Set loading state to true if no screening exists yet
+        }));
     } catch (error) {
         console.error('Failed to parse analysis result:', error);
         analysis.value = null;
     }
 };
-
-loadAnalysis();
 
 const normalizeSkills = (value) => {
     if (Array.isArray(value)) {
@@ -216,8 +270,42 @@ const normalizeCandidate = (candidate) => ({
     extracted_skills: normalizeSkills(candidate?.extracted_skills),
 });
 
-const candidates = computed(() => (analysis.value?.candidates || []).map(normalizeCandidate));
 const failedFiles = computed(() => analysis.value?.failed_files || []);
 const jobDescription = computed(() => analysis.value?.job_description || '');
 const totalCandidates = computed(() => analysis.value?.total || candidates.value.length || 0);
+
+const runAgentScoring = async () => {
+    // Sequentially process each candidate to prevent overloading the local LLM
+    for (let i = 0; i < candidates.value.length; i++) {
+        const candidate = candidates.value[i];
+        
+        if (!candidate.agentLoading) continue; // Skip if already scored
+
+        try {
+            const response = await api.post('/screen-candidate', {
+                job_profile: jobProfile.value,
+                candidate: candidate
+            });
+            candidate.screening = response.data.screening;
+        } catch (error) {
+            console.error('Agent scoring failed for', candidate.file_name, error);
+            candidate.screening = { error: 'AI Evaluation failed. Make sure Ollama is running.' };
+        } finally {
+            candidate.agentLoading = false;
+            
+            // Persist progress to sessionStorage so results remain if the user refreshes
+            if (analysis.value && analysis.value.candidates[i]) {
+                analysis.value.candidates[i].screening = candidate.screening;
+                sessionStorage.setItem('cohr_analysis_result', JSON.stringify(analysis.value));
+            }
+        }
+    }
+};
+
+// Load the data and begin the background agent scoring
+loadAnalysis();
+
+onMounted(() => {
+    runAgentScoring();
+});
 </script>

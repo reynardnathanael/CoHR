@@ -2,10 +2,11 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -26,8 +27,13 @@ app.add_middleware(
 
 from extractor import extract_resume_info
 from parser import parse_pdf_with_docling
-from web_runner import build_output
+from web_runner import build_output, build_fast_output
+from agents import screen_candidate
 
+
+class ScreenRequest(BaseModel):
+    job_profile: Dict[str, Any]
+    candidate: Dict[str, Any]
 
 def _save_upload_to_temp_file(file: UploadFile, content: bytes) -> str:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
@@ -91,3 +97,43 @@ async def analyze_resumes(
         for tmp_path in tmp_paths:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
+
+
+@app.post("/api/analyze-fast")
+async def analyze_fast(
+    job_description: str = Form(""),
+    files: List[UploadFile] = File(...),
+):
+    tmp_paths = []
+
+    try:
+        for file in files:
+            tmp_paths.append(_save_upload_to_temp_file(file, await file.read()))
+
+        if not tmp_paths:
+            raise HTTPException(
+                status_code=400,
+                detail="Upload at least one PDF resume.",
+            )
+
+        output = build_fast_output(job_description, tmp_paths)
+        output["job_description"] = job_description
+        return output
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        for tmp_path in tmp_paths:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+
+@app.post("/api/screen-candidate")
+async def run_agent(request: ScreenRequest):
+    try:
+        # This hits the Ollama agent strictly for ONE candidate
+        screening_result = screen_candidate(request.job_profile, request.candidate)
+        return {"screening": screening_result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
