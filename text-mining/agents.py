@@ -113,18 +113,10 @@ def _safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
 
 def ollama_available() -> bool:
     try:
-        request = urllib.request.Request(
-            OLLAMA_URL,
-            data=json.dumps(
-                {
-                    "model": DEFAULT_OLLAMA_MODEL,
-                    "prompt": "ping",
-                    "stream": False,
-                }
-            ).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+        # Check the base URL to see if the Ollama service is alive
+        # This is much faster than doing a full "ping" generation which can timeout.
+        base_url = OLLAMA_URL.replace("/api/generate", "")
+        request = urllib.request.Request(base_url, method="GET")
         with urllib.request.urlopen(request, timeout=3) as response:
             return response.status == 200
     except Exception:
@@ -351,7 +343,8 @@ def _score_overlap(required: List[str], candidate: List[str]) -> Dict[str, Any]:
     return {"score": score, "matched": matched, "missing": missing}
 
 
-def screen_candidate(job_profile: Dict[str, Any], resume: Dict[str, Any]) -> Dict[str, Any]:
+def screen_candidate(job_profile: Dict[str, Any], resume: Dict[str, Any], *, model: Optional[str] = None) -> Dict[str, Any]:
+    # 1. FALLBACK MATH LOGIC (Used if Ollama is down)
     skills = resume.get("extracted_skills", [])
     projects = _listify(resume.get("projects", ""))
     education = _listify(resume.get("education", ""))
@@ -372,7 +365,7 @@ def screen_candidate(job_profile: Dict[str, Any], resume: Dict[str, Any]) -> Dic
     if not projects:
         weaknesses.append("No project evidence found.")
 
-    return {
+    fallback_result = {
         "fit_category": fit_category,
         "score": round(confidence * 100, 2),
         "strengths": skill_match["matched"][:5] + tool_match["matched"][:5],
@@ -388,3 +381,62 @@ def screen_candidate(job_profile: Dict[str, Any], resume: Dict[str, Any]) -> Dic
             "project_count": len(projects),
         },
     }
+
+    # 2. TRUE AI AGENT LOGIC
+    if not ollama_available():
+        fallback_result["error"] = "AI Evaluation failed. Used fallback math scoring."
+        return fallback_result
+
+    prompt = f"""
+You are an elite Senior Technical Recruiter. Evaluate the candidate against the job requirements.
+
+Job Requirements: {json.dumps(job_profile)}
+Candidate Resume: {resume.get('full_text', resume.get('experience', ''))}
+
+Based on your reasoning, provide ONLY a valid JSON object with the following exact keys:
+- "fit_category": exactly one of "Strong Fit", "Potential Fit", or "Weak Fit".
+- "score": a number from 0 to 100 representing your confidence in this candidate.
+- "strengths": an array of 3 to 5 strings detailing their strongest matching skills.
+- "weaknesses": an array of 2 to 3 strings detailing missing requirements or red flags.
+- "recommendation": a short 1-sentence recommendation on whether HR should interview them.
+""".strip()
+
+    try:
+        raw = call_ollama(prompt, system="You are an expert HR recruiter outputting strict JSON.", model=model)
+        parsed = _safe_json_loads(raw)
+        if parsed and "score" in parsed and "fit_category" in parsed:
+            # Merge the AI insights with the base evidence formatting
+            parsed["confidence"] = parsed["score"] / 100.0
+            parsed["evidence"] = fallback_result["evidence"]
+            return parsed
+    except Exception as exc:
+        fallback_result["error"] = f"AI Agent error: {str(exc)}. Used fallback math scoring."
+
+    return fallback_result
+
+
+def generate_summary_agent(
+    resume_text: str,
+    job_description: str,
+    model: Optional[str] = None
+) -> str:
+    if not ollama_available():
+        return "Failed to generate AI summary. Make sure Ollama is running locally."
+
+    prompt = f"""
+You are an expert HR assistant. Write a concise, 3-to-4 sentence professional summary of the candidate's background and their potential fit for the role.
+
+Job description:
+{job_description}
+
+Resume text:
+{resume_text}
+
+Provide ONLY the plain text summary. Do not use bullet points or introductory phrases like "Here is a summary".
+""".strip()
+
+    try:
+        raw = call_ollama(prompt, system="You are a professional HR assistant.", model=model)
+        return raw.strip() if raw else "Summary generation returned empty."
+    except Exception as exc:
+        return f"Failed to generate summary: {str(exc)}"

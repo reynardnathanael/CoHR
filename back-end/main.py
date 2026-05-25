@@ -28,12 +28,16 @@ app.add_middleware(
 from extractor import extract_resume_info
 from parser import parse_pdf_with_docling
 from web_runner import build_output, build_fast_output
-from agents import screen_candidate
+from agents import screen_candidate, generate_summary_agent
 
 
 class ScreenRequest(BaseModel):
     job_profile: Dict[str, Any]
     candidate: Dict[str, Any]
+    
+class SummaryRequest(BaseModel):
+    job_description: str
+    resume_text: str
 
 def _save_upload_to_temp_file(file: UploadFile, content: bytes) -> str:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
@@ -135,5 +139,13 @@ async def run_agent(request: ScreenRequest):
         # This hits the Ollama agent strictly for ONE candidate
         screening_result = screen_candidate(request.job_profile, request.candidate)
         return {"screening": screening_result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/api/generate-summary")
+async def generate_summary(request: SummaryRequest):
+    try:
+        result = generate_summary_agent(request.resume_text, request.job_description)
+        return {"summary": result}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

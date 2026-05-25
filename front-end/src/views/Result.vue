@@ -105,7 +105,10 @@
                 <div class="mt-5 space-y-4">
                     <div>
                         <p class="text-sm font-semibold text-slate-700 mb-1">Summary</p>
-                        <p class="text-sm text-slate-600 line-clamp-4">{{ candidate.summary || 'No summary extracted.' }}</p>
+                        <div v-if="candidate.summaryLoading" class="flex items-center gap-2 text-indigo-400 text-sm py-1">
+                            <i class="pi pi-spin pi-spinner"></i> Generating AI summary...
+                        </div>
+                        <p v-else class="text-sm text-slate-600 line-clamp-4">{{ candidate.ai_summary || candidate.summary || 'No summary extracted.' }}</p>
                     </div>
                     <div>
                         <p class="text-sm font-semibold text-slate-700 mb-1">Education</p>
@@ -114,6 +117,22 @@
                     <div>
                         <p class="text-sm font-semibold text-slate-700 mb-1">Experience</p>
                         <p class="text-sm text-slate-600 line-clamp-6">{{ candidate.experience || 'No experience extracted.' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-slate-700 mb-1">Projects</p>
+                        <p class="text-sm text-slate-600 line-clamp-4">{{ candidate.projects || 'No projects extracted.' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-slate-700 mb-1">Certifications</p>
+                        <p class="text-sm text-slate-600 line-clamp-4">{{ candidate.certifications || 'No certifications extracted.' }}</p>
+                    </div>
+                    <div v-if="candidate.achievements && candidate.achievements.length > 0">
+                        <p class="text-sm font-semibold text-slate-700 mb-1">Achievements</p>
+                        <p class="text-sm text-slate-600 line-clamp-4">{{ candidate.achievements }}</p>
+                    </div>
+                    <div v-if="candidate.languages && candidate.languages.length > 0">
+                        <p class="text-sm font-semibold text-slate-700 mb-1">Languages</p>
+                        <p class="text-sm text-slate-600 line-clamp-4">{{ candidate.languages }}</p>
                     </div>
                 </div>
 
@@ -204,7 +223,8 @@ const loadAnalysis = () => {
         analysis.value = JSON.parse(stored);
         candidates.value = (analysis.value?.candidates || []).map(c => ({
             ...normalizeCandidate(c),
-            agentLoading: !c.screening // Set loading state to true if no screening exists yet
+            agentLoading: !c.screening, // Set loading state to true if no screening exists yet
+            summaryLoading: !c.ai_summary
         }));
     } catch (error) {
         console.error('Failed to parse analysis result:', error);
@@ -302,10 +322,36 @@ const runAgentScoring = async () => {
     }
 };
 
+const runSummaryAgent = async () => {
+    for (let i = 0; i < candidates.value.length; i++) {
+        const candidate = candidates.value[i];
+        
+        if (!candidate.summaryLoading) continue;
+
+        try {
+            const response = await api.post('/generate-summary', {
+                job_description: jobDescription.value,
+                resume_text: candidate.full_text || candidate.experience || ''
+            });
+            candidate.ai_summary = response.data.summary;
+        } catch (error) {
+            console.error('Summary generation failed for', candidate.file_name, error);
+            candidate.ai_summary = "Failed to load AI summary. " + (error?.response?.data?.detail || "");
+        } finally {
+            candidate.summaryLoading = false;
+            if (analysis.value && analysis.value.candidates[i]) {
+                analysis.value.candidates[i].ai_summary = candidate.ai_summary;
+                sessionStorage.setItem('cohr_analysis_result', JSON.stringify(analysis.value));
+            }
+        }
+    }
+};
+
 // Load the data and begin the background agent scoring
 loadAnalysis();
 
 onMounted(() => {
     runAgentScoring();
+    runSummaryAgent();
 });
 </script>

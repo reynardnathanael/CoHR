@@ -50,10 +50,13 @@ def build_fast_output(job_description, file_paths):
                 "experience": resume.get("experience", ""),
                 "projects": resume.get("projects", ""),
                 "certifications": resume.get("certifications", ""),
+                "achievements": resume.get("achievements", ""),
+                "languages": resume.get("languages", ""),
                 "summary": resume.get("summary", ""),
                 "email": resume.get("email", ""),
                 "phone_number": resume.get("phone_number", ""),
                 "location": resume.get("location", ""),
+                "full_text": resume.get("full_text", ""),
             }
         )
 
