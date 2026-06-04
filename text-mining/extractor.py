@@ -58,6 +58,8 @@ NOISY_SKILLS = {
 
 
 TECH_SKILL_ALIASES = {
+    "R": ["r", "r programming", "r language"],
+    "python": ["python", "python programming", "python language"],
     "sql": ["sql", "structured query language"],
     "sql server": ["sql server", "microsoft sql server", "ms sql server", "mssql"],
     "oracle": ["oracle", "oracle database", "oracle db"],
@@ -263,7 +265,7 @@ def extract_sections(text):
         sections.setdefault(current_section, []).append(line)
 
     return {
-        section: clean_section_text(" ".join(content))
+        section: clean_section_text("\n".join(content))
         for section, content in sections.items()
     }
 
@@ -495,20 +497,37 @@ def extract_structured_education(text):
     if not source:
         return buckets
 
-    lines = [line.strip() for line in re.split(r"[\n•;|]+", source) if line.strip()]
-    if not lines:
-        lines = [source]
+    # Split lines on common separators, and further split combined degree lines
+    raw_lines = [line.strip() for line in re.split(r"[\n•]+", source) if line.strip()]
+    if not raw_lines:
+        raw_lines = [source]
 
-    for line in lines:
-        lowered = line.lower()
-        if re.search(r"\b(ph\.?d|doctorate|doctoral)\b", lowered):
-            _append_unique(buckets["phd_edu"], line)
-        elif re.search(r"\b(master|m\.?sc|m\.?s\.?|mba|ma|meng|m\.?eng)\b", lowered):
-            _append_unique(buckets["master_edu"], line)
-        elif re.search(r"\b(bachelor|b\.?sc|b\.?s\.?|ba|beng|b\.?eng|undergraduate)\b", lowered):
-            _append_unique(buckets["bachelor_edu"], line)
-        else:
-            _append_unique(buckets["other_edu"], line)
+    split_pattern = re.compile(r"(?i)\s*(?:,|;|/|\||&|\band\b)\s*")
+
+    phd_re = re.compile(r"\b(ph\.?d|doctorate|doctoral)\b", flags=re.IGNORECASE)
+    master_re = re.compile(r"\b(master|m\.?sc|m\.?s\.?|mba|ma\b|meng|m\.?eng)\b", flags=re.IGNORECASE)
+    bachelor_re = re.compile(r"\b(bachelor|b\.?sc|b\.?s\.?|ba\b|beng|b\.?eng|undergraduate)\b", flags=re.IGNORECASE)
+
+    for line in raw_lines:
+        parts = [part.strip() for part in split_pattern.split(line) if part.strip()]
+        if not parts:
+            parts = [line]
+
+        for part in parts:
+            if phd_re.search(part):
+                _append_unique(buckets["phd_edu"], part)
+                continue
+            if master_re.search(part):
+                _append_unique(buckets["master_edu"], part)
+                continue
+            if bachelor_re.search(part):
+                _append_unique(buckets["bachelor_edu"], part)
+                continue
+            # fallback: if the part contains a year or university hint, put it in other
+            if re.search(r"\b(19|20)\d{2}\b", part) or re.search(r"\b(university|college|institute|school)\b", part, flags=re.IGNORECASE):
+                _append_unique(buckets["other_edu"], part)
+            else:
+                _append_unique(buckets["other_edu"], part)
 
     return buckets
 

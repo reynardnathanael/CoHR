@@ -53,6 +53,9 @@ def build_fast_output(job_description, file_paths):
     ranked_resumes = calculate_similarity(job_description, resumes)
 
     candidates = []
+    # Prepare a sanitized list of resumes suitable for the screening function
+    # (avoid embedding non-serializable types like sets into the final JSON)
+    raw_for_screening = []
     for resume in ranked_resumes:
         education = resume.get("education", {})
         if not isinstance(education, dict):
@@ -62,7 +65,17 @@ def build_fast_output(job_description, file_paths):
                 "phd_edu": [],
                 "other_edu": [str(education).strip()] if str(education).strip() else [],
             }
-
+        # Build a sanitized copy of the resume for use by the screening agent
+        sanitized = {
+            "extracted_skills": resume.get("extracted_skills", []),
+            "matched_skills": resume.get("matched_skills", []),
+            "education": education,
+            "experience": resume.get("experience", ""),
+            "projects": resume.get("projects", ""),
+            "certifications": resume.get("certifications", ""),
+            "full_text": resume.get("full_text", ""),
+        }
+        raw_for_screening.append(sanitized)
         candidates.append(
             {
                 "file_name": resume.get("file_name", ""),
@@ -72,17 +85,19 @@ def build_fast_output(job_description, file_paths):
                 "matched_skills": [str(item).strip() for item in resume.get("matched_skills", []) if str(item).strip()],
                 "extracted_skills": [str(item).strip() for item in resume.get("extracted_skills", []) if str(item).strip()],
                 "screening": None,  # To be filled later via Progressive Rendering
-                "education": education,
-                "experience": _flatten_text(resume.get("experience", "")),
-                "projects": _flatten_text(resume.get("projects", "")),
-                "certifications": _flatten_text(resume.get("certifications", "")),
-                "achievements": _flatten_text(resume.get("achievements", "")),
-                "languages": _flatten_text(resume.get("languages", "")),
-                "summary": _flatten_text(resume.get("summary", "")),
-                "email": _flatten_text(resume.get("email", "")),
-                "phone_number": _flatten_text(resume.get("phone_number", "")),
-                "location": _flatten_text(resume.get("location", "")),
-                "full_text": _flatten_text(resume.get("full_text", "")),
+                        "education": education,
+                        # Preserve structured fields (lists/dicts) so the frontend can render them nicely
+                        "experience": resume.get("experience", []),
+                        "projects": resume.get("projects", []),
+                        "certifications": resume.get("certifications", []),
+                        "achievements": resume.get("achievements", []),
+                        "languages": resume.get("languages", []),
+                        "summary": resume.get("summary", ""),
+                        "email": resume.get("email", ""),
+                        "phone_number": resume.get("phone_number", ""),
+                        "location": resume.get("location", ""),
+                        # Keep raw full text (not flattened) so frontend can show it with preserved newlines
+                        "full_text": resume.get("full_text", ""),
             }
         )
 
@@ -91,15 +106,26 @@ def build_fast_output(job_description, file_paths):
         "candidates": candidates,
         "total": len(candidates),
         "failed_files": failed_files,
+        "_raw_for_screening": raw_for_screening,
     }
 
 def build_output(job_description, file_paths):
     """Legacy synchronous function that does both fast parsing and slow screening."""
     output = build_fast_output(job_description, file_paths)
-    
-    for candidate in output["candidates"]:
-        candidate["screening"] = screen_candidate(output["job_profile"], candidate)
-        
+
+    # Use the sanitized resume copies for screening to avoid issues with
+    # non-serializable fields (e.g. sets) that may be present in the
+    # internal ranked resumes returned by calculate_similarity.
+    raw_list = output.get("_raw_for_screening") or []
+
+    for i, candidate in enumerate(output["candidates"]):
+        resume_for_screen = raw_list[i] if i < len(raw_list) else candidate
+        candidate["screening"] = screen_candidate(output["job_profile"], resume_for_screen)
+
+    # Remove internal helper data before returning the final JSON-serializable output
+    if "_raw_for_screening" in output:
+        del output["_raw_for_screening"]
+
     return output
 
 
