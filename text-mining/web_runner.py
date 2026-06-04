@@ -12,6 +12,23 @@ from parser import parse_pdf_with_docling
 from similarity import calculate_similarity
 
 
+def _flatten_text(value):
+    if isinstance(value, dict):
+        flattened = []
+        for item in value.values():
+            text = _flatten_text(item)
+            if text:
+                flattened.append(text)
+        return " ".join(flattened)
+
+    if isinstance(value, list):
+        return " ".join(
+            text for item in value if (text := _flatten_text(item))
+        )
+
+    return str(value).strip() if value else ""
+
+
 def build_fast_output(job_description, file_paths):
     job_profile = build_job_profile(job_description)
     resumes = []
@@ -37,26 +54,35 @@ def build_fast_output(job_description, file_paths):
 
     candidates = []
     for resume in ranked_resumes:
+        education = resume.get("education", {})
+        if not isinstance(education, dict):
+            education = {
+                "bachelor_edu": [],
+                "master_edu": [],
+                "phd_edu": [],
+                "other_edu": [str(education).strip()] if str(education).strip() else [],
+            }
+
         candidates.append(
             {
                 "file_name": resume.get("file_name", ""),
                 "similarity_score": resume.get("similarity_score", 0.0),
                 "embedding_score": resume.get("embedding_score", 0.0),
                 "skill_score": resume.get("skill_score", 0.0),
-                "matched_skills": resume.get("matched_skills", []),
-                "extracted_skills": resume.get("extracted_skills", []),
+                "matched_skills": [str(item).strip() for item in resume.get("matched_skills", []) if str(item).strip()],
+                "extracted_skills": [str(item).strip() for item in resume.get("extracted_skills", []) if str(item).strip()],
                 "screening": None,  # To be filled later via Progressive Rendering
-                "education": resume.get("education", ""),
-                "experience": resume.get("experience", ""),
-                "projects": resume.get("projects", ""),
-                "certifications": resume.get("certifications", ""),
-                "achievements": resume.get("achievements", ""),
-                "languages": resume.get("languages", ""),
-                "summary": resume.get("summary", ""),
-                "email": resume.get("email", ""),
-                "phone_number": resume.get("phone_number", ""),
-                "location": resume.get("location", ""),
-                "full_text": resume.get("full_text", ""),
+                "education": education,
+                "experience": _flatten_text(resume.get("experience", "")),
+                "projects": _flatten_text(resume.get("projects", "")),
+                "certifications": _flatten_text(resume.get("certifications", "")),
+                "achievements": _flatten_text(resume.get("achievements", "")),
+                "languages": _flatten_text(resume.get("languages", "")),
+                "summary": _flatten_text(resume.get("summary", "")),
+                "email": _flatten_text(resume.get("email", "")),
+                "phone_number": _flatten_text(resume.get("phone_number", "")),
+                "location": _flatten_text(resume.get("location", "")),
+                "full_text": _flatten_text(resume.get("full_text", "")),
             }
         )
 

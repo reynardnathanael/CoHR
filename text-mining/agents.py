@@ -148,6 +148,14 @@ def _fallback_resume_schema(text: str) -> Dict[str, Any]:
     extracted = extract_resume_info(text)
     skills = extracted.get("extracted_skills", []) or []
     normalized_text = (text or "").lower()
+    education = extracted.get("education", {}) or {}
+
+    def normalize_education_bucket(value: Any) -> List[str]:
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str) and value.strip():
+            return [value.strip()]
+        return []
 
     def split_items(value: Any) -> List[str]:
         if isinstance(value, list):
@@ -187,7 +195,12 @@ def _fallback_resume_schema(text: str) -> Dict[str, Any]:
     return {
         "skills": sorted({normalize_skill_name(skill) for skill in skills if skill}),
         "tools": tools,
-        "education": split_items(extracted.get("education", "")),
+        "education": {
+            "bachelor_edu": normalize_education_bucket(education.get("bachelor_edu")),
+            "master_edu": normalize_education_bucket(education.get("master_edu")),
+            "phd_edu": normalize_education_bucket(education.get("phd_edu")),
+            "other_edu": normalize_education_bucket(education.get("other_edu")),
+        },
         "experience": split_items(extracted.get("experience", "")),
         "projects": split_items(extracted.get("projects", "")),
         "certifications": split_items(extracted.get("certifications", "")),
@@ -334,6 +347,23 @@ def _listify(value: Any) -> List[str]:
     return []
 
 
+def _normalize_education(value: Any) -> Dict[str, List[str]]:
+    empty = {
+        "bachelor_edu": [],
+        "master_edu": [],
+        "phd_edu": [],
+        "other_edu": [],
+    }
+    if isinstance(value, dict):
+        for key in empty:
+            empty[key] = _listify(value.get(key, []))
+    elif isinstance(value, list):
+        empty["other_edu"] = _listify(value)
+    elif isinstance(value, str) and value.strip():
+        empty["other_edu"] = [value.strip()]
+    return empty
+
+
 def _score_overlap(required: List[str], candidate: List[str]) -> Dict[str, Any]:
     req = {normalize_skill_name(item) for item in required if item}
     cand = {normalize_skill_name(item) for item in candidate if item}
@@ -347,7 +377,7 @@ def screen_candidate(job_profile: Dict[str, Any], resume: Dict[str, Any], *, mod
     # 1. FALLBACK MATH LOGIC (Used if Ollama is down)
     skills = resume.get("extracted_skills", [])
     projects = _listify(resume.get("projects", ""))
-    education = _listify(resume.get("education", ""))
+    education = _normalize_education(resume.get("education", {}))
     experience = _listify(resume.get("experience", ""))
     certifications = _listify(resume.get("certifications", ""))
 
@@ -376,7 +406,7 @@ def screen_candidate(job_profile: Dict[str, Any], resume: Dict[str, Any], *, mod
         "confidence": round(confidence, 3),
         "evidence": {
             "experience_present": bool(experience),
-            "education_present": bool(education),
+            "education_present": any(education.values()),
             "certifications_present": bool(certifications),
             "project_count": len(projects),
         },

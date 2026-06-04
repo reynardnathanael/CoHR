@@ -111,8 +111,25 @@
                         <p v-else class="text-sm text-slate-600 line-clamp-4">{{ candidate.ai_summary || candidate.summary || 'No summary extracted.' }}</p>
                     </div>
                     <div>
-                        <p class="text-sm font-semibold text-slate-700 mb-1">Education</p>
-                        <p class="text-sm text-slate-600 line-clamp-4">{{ candidate.education || 'No education extracted.' }}</p>
+                        <p class="text-sm font-semibold text-slate-700 mb-2">Education</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="rounded-xl bg-slate-50 p-3">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Bachelor</p>
+                                <p class="text-sm text-slate-600 line-clamp-3">{{ formatEducationBucket(candidate.education?.bachelor_edu) || 'No bachelor education extracted.' }}</p>
+                            </div>
+                            <div class="rounded-xl bg-slate-50 p-3">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Master</p>
+                                <p class="text-sm text-slate-600 line-clamp-3">{{ formatEducationBucket(candidate.education?.master_edu) || 'No master education extracted.' }}</p>
+                            </div>
+                            <div class="rounded-xl bg-slate-50 p-3">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">PhD</p>
+                                <p class="text-sm text-slate-600 line-clamp-3">{{ formatEducationBucket(candidate.education?.phd_edu) || 'No PhD education extracted.' }}</p>
+                            </div>
+                            <div class="rounded-xl bg-slate-50 p-3">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Other</p>
+                                <p class="text-sm text-slate-600 line-clamp-3">{{ formatEducationBucket(candidate.education?.other_edu) || 'No additional education extracted.' }}</p>
+                            </div>
+                        </div>
                     </div>
                     <div>
                         <p class="text-sm font-semibold text-slate-700 mb-1">Experience</p>
@@ -244,6 +261,20 @@ const normalizeSkills = (value) => {
     return [];
 };
 
+const normalizeList = (value) => {
+    if (Array.isArray(value)) {
+        return value.filter(Boolean).map((entry) => String(entry).trim()).filter(Boolean);
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+        return [value.trim()];
+    }
+
+    return [];
+};
+
+const formatEducationBucket = (value) => normalizeList(value).join(', ');
+
 const formatLocation = (value) => {
     if (!value) {
         return '';
@@ -288,6 +319,12 @@ const normalizeCandidate = (candidate) => ({
     ),
     matched_skills: normalizeSkills(candidate?.matched_skills),
     extracted_skills: normalizeSkills(candidate?.extracted_skills),
+    education: {
+        bachelor_edu: normalizeList(candidate?.education?.bachelor_edu),
+        master_edu: normalizeList(candidate?.education?.master_edu),
+        phd_edu: normalizeList(candidate?.education?.phd_edu),
+        other_edu: normalizeList(candidate?.education?.other_edu || candidate?.education),
+    },
 });
 
 const failedFiles = computed(() => analysis.value?.failed_files || []);

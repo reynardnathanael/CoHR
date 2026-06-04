@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import traceback
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -67,6 +68,7 @@ async def parse_pdf(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as exc:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         if tmp_path and os.path.exists(tmp_path):
@@ -96,6 +98,7 @@ async def analyze_resumes(
     except HTTPException:
         raise
     except Exception as exc:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         for tmp_path in tmp_paths:
@@ -126,6 +129,7 @@ async def analyze_fast(
     except HTTPException:
         raise
     except Exception as exc:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         for tmp_path in tmp_paths:
@@ -140,6 +144,7 @@ async def run_agent(request: ScreenRequest):
         screening_result = screen_candidate(request.job_profile, request.candidate)
         return {"screening": screening_result}
     except Exception as exc:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc))
 
 @app.post("/api/generate-summary")
@@ -148,4 +153,5 @@ async def generate_summary(request: SummaryRequest):
         result = generate_summary_agent(request.resume_text, request.job_description)
         return {"summary": result}
     except Exception as exc:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc))

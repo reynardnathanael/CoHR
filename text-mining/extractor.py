@@ -470,6 +470,49 @@ def extract_location(text):
     return ""
 
 
+def _empty_education_buckets():
+    return {
+        "bachelor_edu": [],
+        "master_edu": [],
+        "phd_edu": [],
+        "other_edu": [],
+    }
+
+
+def _append_unique(bucket, value):
+    value = clean_section_text(value)
+    if value and value not in bucket:
+        bucket.append(value)
+
+
+def extract_structured_education(text):
+    buckets = _empty_education_buckets()
+
+    if not text:
+        return buckets
+
+    source = clean_section_text(text)
+    if not source:
+        return buckets
+
+    lines = [line.strip() for line in re.split(r"[\n•;|]+", source) if line.strip()]
+    if not lines:
+        lines = [source]
+
+    for line in lines:
+        lowered = line.lower()
+        if re.search(r"\b(ph\.?d|doctorate|doctoral)\b", lowered):
+            _append_unique(buckets["phd_edu"], line)
+        elif re.search(r"\b(master|m\.?sc|m\.?s\.?|mba|ma|meng|m\.?eng)\b", lowered):
+            _append_unique(buckets["master_edu"], line)
+        elif re.search(r"\b(bachelor|b\.?sc|b\.?s\.?|ba|beng|b\.?eng|undergraduate)\b", lowered):
+            _append_unique(buckets["bachelor_edu"], line)
+        else:
+            _append_unique(buckets["other_edu"], line)
+
+    return buckets
+
+
 def normalize_skill_name(skill):
     if not skill:
         return ""
@@ -558,7 +601,19 @@ def extract_resume_info(text):
     sections = extract_sections(text)
     sections = fix_missing_sections(sections, text)
 
-    full_text = " ".join(sections.values())
+    def flatten_text(value):
+        if isinstance(value, dict):
+            flattened = []
+            for item in value.values():
+                flattened.append(flatten_text(item))
+            return " ".join(part for part in flattened if part)
+        if isinstance(value, list):
+            return " ".join(flatten_text(item) for item in value if flatten_text(item))
+        return str(value).strip() if value else ""
+
+    full_text = " ".join(
+        part for part in (flatten_text(value) for value in sections.values()) if part
+    )
     header_text = sections.get("header", "")
 
     skills_text = sections.get("skills", "")
@@ -576,12 +631,16 @@ def extract_resume_info(text):
 
     contact_text = text or ""
 
-    combined_contact_text = "\n".join([
-        contact_text,
-        clean_text(contact_text),
-        header_text,
-        full_text,
-    ])
+    combined_contact_text = "\n".join(
+        part
+        for part in [
+            flatten_text(contact_text),
+            flatten_text(clean_text(contact_text)),
+            flatten_text(header_text),
+            flatten_text(full_text),
+        ]
+        if part
+    )
 
     email = extract_email(combined_contact_text)
     phone_number = extract_phone_number(combined_contact_text)
@@ -591,7 +650,7 @@ def extract_resume_info(text):
         "header": sections.get("header", ""),
         "summary": sections.get("summary", ""),
         "experience": sections.get("experience", ""),
-        "education": sections.get("education", ""),
+        "education": extract_structured_education(sections.get("education", "")),
         "skills_section": sections.get("skills", ""),
         "projects": sections.get("projects", ""),
         "certifications": sections.get("certifications", ""),

@@ -83,8 +83,23 @@ def build_weighted_candidate_text(resume):
 
     parts = []
 
+    def flatten_text(value):
+        if isinstance(value, dict):
+            flattened = []
+            for bucket in value.values():
+                if isinstance(bucket, list):
+                    flattened.extend(str(item).strip() for item in bucket if str(item).strip())
+                elif isinstance(bucket, str) and bucket.strip():
+                    flattened.append(bucket.strip())
+            return " ".join(flattened)
+
+        if isinstance(value, list):
+            return " ".join(str(item).strip() for item in value if str(item).strip())
+
+        return str(value).strip() if value else ""
+
     for section, weight in SECTION_WEIGHTS.items():
-        text = resume.get(section, "")
+        text = flatten_text(resume.get(section, ""))
 
         if text:
             parts.extend([text] * weight)
