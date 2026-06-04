@@ -356,7 +356,40 @@ def extract_experience(sections):
 
 
 def extract_education(sections):
-    return clean_section_text(sections.get("education", ""))
+    text = clean_section_text(sections.get("education", ""))
+
+    buckets = {
+        "bachelor_edu": [],
+        "master_edu": [],
+        "phd_edu": [],
+        "other_edu": [],
+    }
+
+    if not text:
+        return buckets
+
+    split_pattern = re.compile(r"(?i)\s*(?:,|;|/|\||&|\band\b)\s*")
+    parts = [part.strip() for part in split_pattern.split(text) if part.strip()]
+    if not parts:
+        parts = [text.strip()]
+
+    def add_unique(bucket, value):
+        v = value.strip()
+        if v and v not in bucket:
+            bucket.append(v)
+
+    for line in parts:
+        lowered = line.lower()
+        if re.search(r"\b(ph\.?d|doctorate|doctoral)\b", lowered):
+            add_unique(buckets["phd_edu"], line)
+        elif re.search(r"\b(master|m\.?sc|m\.?s\.?|mba|ma|meng|m\.?eng)\b", lowered):
+            add_unique(buckets["master_edu"], line)
+        elif re.search(r"\b(bachelor|b\.?sc|b\.?s\.?|ba|beng|b\.?eng|undergraduate)\b", lowered):
+            add_unique(buckets["bachelor_edu"], line)
+        else:
+            add_unique(buckets["other_edu"], line)
+
+    return buckets
 
 
 def extract_certifications(sections):

@@ -70,40 +70,39 @@ import { useRouter } from "vue-router";
 const fileUpload = ref();
 const router = useRouter();
 const selectedRole = ref();
-const jobDescription = ref("Cras nec velit aliquet, tempus velit eu, luctus lacus. Nulla vulputate lacus nisl, accumsan tristique magna rutrum id. Sed nisi magna, cursus vel velit eget, maximus cursus lacus. Donec non libero magna. Vestibulum vitae finibus ante. Praesent sit amet turpis faucibus, posuere augue a, posuere nisl. Donec ut enim varius, porttitor ligula in, accumsan neque. Etiam vel convallis lorem. Aliquam erat volutpat. Vestibulum gravida urna quis dolor ornare, ullamcorper condimentum justo aliquet. In ligula tortor, posuere accumsan diam id, vestibulum porta metus. Praesent eget imperdiet eros. \n\nCurabitur non quam sed magna tincidunt iaculis nec ac felis. Quisque pulvinar ligula neque, vitae hendrerit felis hendrerit ac. Vivamus nec vehicula elit, sit amet condimentum quam. Morbi quis orci ac massa semper congue. Aliquam eget imperdiet nibh, vel bibendum neque. Etiam sit amet massa ut sem feugiat euismod. Maecenas convallis mollis libero, a bibendum risus placerat nec. Praesent blandit faucibus neque vitae convallis. Nam sed ornare augue.Proin eu ullamcorper orci. In at erat nibh. Vestibulum a turpis sapien. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.");
+const jobDescription = ref("");
 const loading = ref(false);
 const defaultResultText = "Select one or more resumes and submit to rank them against the chosen job description.";
 const result = ref(defaultResultText);
 
 const defaultJobDescription = jobDescription.value;
+const formatRoleDescription = (description) => {
+    if (!description || typeof description !== 'string') {
+        return '';
+    }
+
+    return description
+        .split(';')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) => `• ${item}`)
+        .join('\n');
+};
+
 const roleDescriptions = {
-    'Software Engineer': 'Looking for a software engineer with experience in building web applications, writing clean code, debugging production issues, and collaborating with product teams.',
-    'Product Manager': 'Looking for a product manager who can translate user needs into roadmaps, coordinate delivery, and work closely with engineering and design teams.',
-    'Data Scientist': 'Looking for a data scientist with experience in statistics, machine learning, data cleaning, model evaluation, and communicating insights clearly.',
-    'UX Designer': 'Looking for a UX designer with experience in wireframing, prototyping, user research, interaction design, and accessibility.',
-    'Marketing Specialist': 'Looking for a marketing specialist who understands campaign planning, content creation, analytics, and audience growth.',
-    'Sales Associate': 'Looking for a sales associate with strong communication skills, customer engagement experience, and the ability to meet sales targets.',
-    'Data Analyst': 'Looking for a data analyst with experience in SQL, dashboards, reporting, data visualization, and turning data into recommendations.',
-    'Human Resources Manager': 'Looking for an HR manager with experience in recruitment, employee relations, policy implementation, and talent screening.',
-    'Financial Analyst': 'Looking for a financial analyst with experience in financial modeling, forecasting, reporting, and business analysis.',
-    'Project Manager': 'Looking for a project manager who can plan delivery, manage timelines, coordinate stakeholders, and keep projects on track.',
-    'Quality Assurance Engineer': 'Looking for a quality assurance engineer with experience in test planning, automation, bug tracking, and release validation.',
-    'Customer Support Representative': 'Looking for a customer support representative with strong communication, issue resolution, and service-oriented experience.',
+    'Business Analyst': formatRoleDescription("Master's degree or equivalent practical experience; Certified Supply Chain Professional (CSCP) from APICS; 5 years of experience designing, configuring, and testing Enterprise Resource Planning (ERP) Logistic and Warehouse Management Systems (SAP, EWM); 5 years of experience in either Supply Chain Logistics, the Transportation Industry, or Data Center Environment and Safety; 5 years of experience translating business problems into research questions and translating research findings and insights into marketing recommendations; 5 years of experience designing, scoping, executing, and delivering research and analysis projects; Experience leading solution architecture and systems integrations; Experience in management consulting focus on marketing measurement or quantitative disciplines; Experience managing research and measurement agencies; Experience influencing executive leadership with cohesive narratives built on a mix of qualitative and quantitative data; Proficiency in working with database technologies, including both standalone and cloud-based databases, for data extraction and quantitative data manipulation, with experience in SQL, BI, and agentic tools (e.g., Looker, Gemini for insights); Familiarity with scripting languages (Python) and data science techniques; Proficiency in identifying, assessing, estimating, and resolving complex business challenges, particularly those that involve evaluating variable factors, including security considerations; Ability to solve problems in changing, and ambiguous business environments through data intuition and business acumen; Knowledge of logistics and execution processes with excellent investigative skills; Ability to effectively communicate findings, approaches, and recommendations to a wide range of technical and non-technical audiences"),
+    'Data Scientist': formatRoleDescription("Master's degree in Statistics, Data Science, Mathematics, Physics, Economics, Operations Research, Engineering, or a related quantitative field; 10 years of work experience using analytics to solve product or business problems, coding (e.g., Python, R, SQL), querying databases or statistical analysis, or 8 years of work experience with a PhD degree; Familiarity with modern Machine Learning and Large Language Model (LLM) techniques; Ability to commit to knowledge and learning, respect for science, tolerance for ambiguity, and interest in practical application of science to business; Excellent collaboration skills, with the ability to collaborate cross-functionally and work effectively with Data Scientist (DS), User Experience Researcher (UXR), product and engineering partners"),
+    'DevOps Engineer': formatRoleDescription("Master’s degree or PhD in Engineering, Computer Science, or a related technical field; 8 years of experience programming in C++; 5 years of experience testing and launching software products; 5 years of experience building and developing large-scale infrastructure, distributed systems, or networks, with deep expertise in compute technologies, storage, or hardware architecture; 3 years of experience in software design and architecture, including a proven track record of building cloud architecture in a production environment while balancing short-term and long-term needs; 2 years of experience in a technical leadership role, guiding and mentoring a team of cloud/DevOps engineers, with the ability to establish and enforce engineering best practices, coding standards, and architectural patterns; Ability to take ownership of large, ambiguous technical projects, break them down into manageable tasks, and drive them to successful completion"),
+    'Digital Media Expert': formatRoleDescription("Bachelor’s degree or equivalent practical experience; 6 years of experience in Product Marketing, Social Media Strategy, or Digital Advertising; Experience turning technical product concepts into social content; Understanding of social platforms, including social media platforms and YouTube, with a deep knowledge of targeting, bidding strategies, and performance measurement; Ability to develop and execute successful social strategies that have a direct and measurable impact on the business; Ability to grow in a fast-paced environment and pivot strategies based on breaking news or industry shifts; Excellent analytical skills with the ability to define and track key business metrics, analyze data, and translate insights into actionable strategies"),
+    'Human Resources': formatRoleDescription("Master's or MBA degree, or equivalent practical experience; 12 years of experience as an HR business partner or HR generalist supporting leaders at global companies; Experience in organizational effectiveness, including workforce planning and organizational design; Expertise in talent management, total rewards, employee relations, and HR data analytics; Demonstrated ability to work within constraints as well as challenge the status quo; Effective communicator with the ability to build relationships with senior leaders and a complex set of stakeholders to drive organizational change; Demonstrated analytical and problem solving skills, including ability to analyze data, understand trends and develop recommendations for actions based on the analysis; Comfortable with ambiguity and being a part of deeply complex strategy discussions"),
 };
 
 const roles = ref([
-    { name: 'Software Engineer' },
-    { name: 'Product Manager' },
+    { name: 'Business Analyst' },
     { name: 'Data Scientist' },
-    { name: 'UX Designer' },
-    { name: 'Marketing Specialist' },
-    { name: 'Sales Associate' },
-    { name: 'Data Analyst' },
-    { name: 'Human Resources Manager' },
-    { name: 'Financial Analyst' },
-    { name: 'Project Manager' },
-    { name: 'Quality Assurance Engineer' },
-    { name: 'Customer Support Representative' },    
+    { name: 'DevOps Engineer' },
+    { name: 'Digital Media Expert' },
+    { name: 'Human Resources' },
 ]);
 
 watch(selectedRole, (role) => {
@@ -213,6 +212,7 @@ const createPostFile = async () => {
     try {
         const response = await api.post('/analyze-fast', formData);
         const normalizedResult = normalizeAnalysisResult(response.data);
+        normalizedResult.job_description = jobDescription.value;
 
         sessionStorage.setItem('cohr_analysis_result', JSON.stringify(normalizedResult));
         result.value = `Extraction complete. Proceeding to score ${normalizedResult.total} candidate(s)...`;

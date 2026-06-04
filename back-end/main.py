@@ -49,6 +49,10 @@ def _save_upload_to_temp_file(file: UploadFile, content: bytes) -> str:
         return tmp_file.name
 
 
+    # In-memory store for a precomputed analysis payload uploaded via CLI
+    _LATEST_ANALYSIS = None
+
+
 @app.post("/api/parse-pdf")
 async def parse_pdf(file: UploadFile = File(...)):
     tmp_path = None
@@ -155,3 +159,22 @@ async def generate_summary(request: SummaryRequest):
     except Exception as exc:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/upload-analysis")
+async def upload_analysis(payload: Dict[str, Any]):
+    """Accept a full analysis JSON (from web_runner.py) and store it in memory.
+
+    This allows running the CLI `web_runner.py` locally and pushing the result
+    to the backend so the frontend can fetch it from `/api/latest-analysis`.
+    """
+    global _LATEST_ANALYSIS
+    _LATEST_ANALYSIS = payload
+    return {"status": "ok", "total": len(payload.get("candidates", []))}
+
+
+@app.get("/api/latest-analysis")
+async def latest_analysis():
+    if _LATEST_ANALYSIS is None:
+        raise HTTPException(status_code=404, detail="No analysis uploaded yet")
+    return _LATEST_ANALYSIS
