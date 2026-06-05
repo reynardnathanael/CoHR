@@ -58,8 +58,6 @@ NOISY_SKILLS = {
 
 
 TECH_SKILL_ALIASES = {
-    "R": ["r", "r programming", "r language"],
-    "python": ["python", "python programming", "python language"],
     "sql": ["sql", "structured query language"],
     "sql server": ["sql server", "microsoft sql server", "ms sql server", "mssql"],
     "oracle": ["oracle", "oracle database", "oracle db"],
@@ -237,8 +235,10 @@ def clean_section_text(text):
     if "@" not in text:
         text = re.sub(r"(?<=\w)([A-Z][a-z]+)", r" \1", text)
 
-    text = re.sub(r"\s+", " ", text)
+    # Preserve newlines but squash horizontal spaces so we can split by line later
+    text = re.sub(r"[ \t\r\f\v]+", " ", text)
     text = text.replace(" - ", " • ")
+    text = re.sub(r"\n\s*\n+", "\n", text)
     return text.strip()
 
 
@@ -372,7 +372,7 @@ def fix_missing_sections(sections, raw_text):
         recovered_lines.append(line)
 
     if recovered_lines:
-        sections["experience"] = clean_section_text(" ".join(recovered_lines))
+        sections["experience"] = clean_section_text("\n".join(recovered_lines))
 
     return sections
 
@@ -472,66 +472,6 @@ def extract_location(text):
     return ""
 
 
-def _empty_education_buckets():
-    return {
-        "bachelor_edu": [],
-        "master_edu": [],
-        "phd_edu": [],
-        "other_edu": [],
-    }
-
-
-def _append_unique(bucket, value):
-    value = clean_section_text(value)
-    if value and value not in bucket:
-        bucket.append(value)
-
-
-def extract_structured_education(text):
-    buckets = _empty_education_buckets()
-
-    if not text:
-        return buckets
-
-    source = clean_section_text(text)
-    if not source:
-        return buckets
-
-    # Split lines on common separators, and further split combined degree lines
-    raw_lines = [line.strip() for line in re.split(r"[\n•]+", source) if line.strip()]
-    if not raw_lines:
-        raw_lines = [source]
-
-    split_pattern = re.compile(r"(?i)\s*(?:,|;|/|\||&|\band\b)\s*")
-
-    phd_re = re.compile(r"\b(ph\.?d|doctorate|doctoral)\b", flags=re.IGNORECASE)
-    master_re = re.compile(r"\b(master|m\.?sc|m\.?s\.?|mba|ma\b|meng|m\.?eng)\b", flags=re.IGNORECASE)
-    bachelor_re = re.compile(r"\b(bachelor|b\.?sc|b\.?s\.?|ba\b|beng|b\.?eng|undergraduate)\b", flags=re.IGNORECASE)
-
-    for line in raw_lines:
-        parts = [part.strip() for part in split_pattern.split(line) if part.strip()]
-        if not parts:
-            parts = [line]
-
-        for part in parts:
-            if phd_re.search(part):
-                _append_unique(buckets["phd_edu"], part)
-                continue
-            if master_re.search(part):
-                _append_unique(buckets["master_edu"], part)
-                continue
-            if bachelor_re.search(part):
-                _append_unique(buckets["bachelor_edu"], part)
-                continue
-            # fallback: if the part contains a year or university hint, put it in other
-            if re.search(r"\b(19|20)\d{2}\b", part) or re.search(r"\b(university|college|institute|school)\b", part, flags=re.IGNORECASE):
-                _append_unique(buckets["other_edu"], part)
-            else:
-                _append_unique(buckets["other_edu"], part)
-
-    return buckets
-
-
 def normalize_skill_name(skill):
     if not skill:
         return ""
@@ -616,23 +556,126 @@ def extract_skills_with_skillner(text):
     return sorted(skills)
 
 
+def extract_name(text):
+    if not text:
+        return ""
+
+    cleaned_text = clean_text(text)
+    lines = [line.strip() for line in cleaned_text.splitlines() if line.strip()]
+    if not lines:
+        return ""
+        
+    invalid_names = sorted({
+        "resume", "curriculum vitae", "cv", "profile", "summary", 
+        "personal information", "contact", "contact info", "contact information",
+        "experience", "education", "skills", "projects", "certifications", 
+        "languages", "portfolio", "github", "linkedin", "address", "phone", "email",
+        "website", "http", "https", "www", "page", "info", "information"
+    }, key=len, reverse=True)
+
+    def clean_name_line(line):
+        # Strip common resume noise like emails, phones, and urls
+        line = re.sub(r"[\w\.-]+@[\w\.-]+", "", line)
+        line = re.sub(r"\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}", "", line)
+        line = re.sub(r"https?://\S+", "", line, flags=re.IGNORECASE)
+        line = re.sub(r"www\.\S+", "", line, flags=re.IGNORECASE)
+        line = re.sub(r"(github|linkedin)\.com/\S+", "", line, flags=re.IGNORECASE)
+        
+        # Pre-emptively remove invalid words so they don't count towards the word limit
+        for invalid in invalid_names:
+            line = re.sub(rf"\b{re.escape(invalid)}\b", "", line, flags=re.IGNORECASE)
+            
+        clean = re.sub(r"[^a-zA-Z\s\-']", " ", line).strip()
+        return re.sub(r"\s+", " ", clean).strip()
+
+    # 1. Try NER on the first 15 lines
+    header = "\n".join(lines[:15])
+    if header.isupper():
+        header = header.title()
+    doc = _nlp(header)
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            name = clean_name_line(ent.text)
+            if 0 < len(name.split()) <= 4:
+                return name.title()
+
+    # 2. Fallback: check the first 5 lines for a short 1-4 word line
+    for line in lines[:5]:
+        clean_line = clean_name_line(line)
+        if not clean_line:
+            continue
+        words = clean_line.split()
+        if 0 < len(words) <= 4:
+            return clean_line.title()
+
+    # 3. Fallback: If the first few lines are flattened strings, split by common separators
+    for line in lines[:3]:
+        for invalid in invalid_names:
+            line = re.sub(rf"\b{re.escape(invalid)}\b", "|", line, flags=re.IGNORECASE)
+        parts = re.split(r"[|•\-–—:;,]", line)
+        if len(parts) > 1:
+            for part in parts:
+                clean_part = clean_name_line(part)
+                if not clean_part:
+                    continue
+                words = clean_part.split()
+                if 0 < len(words) <= 4:
+                    return clean_part.title()
+
+    # 4. Ultimate Fallback: Aggressively grab the first 2 words from the cleaned text
+    for line in lines[:3]:
+        clean_line = clean_name_line(line)
+        if not clean_line:
+            continue
+        words = clean_line.split()
+        if len(words) >= 2:
+            return " ".join(words[:2]).title()
+        elif len(words) == 1:
+            return words[0].title()
+
+    return ""
+
+
+BACHELOR_PATTERN = re.compile(r"\b(bachelor|bachelors|bsc|b\.sc|b\.a|b\.s|b\.e|b\.tech|bs|ba|undergraduate|bba|bfa)\b", re.IGNORECASE)
+MASTER_PATTERN = re.compile(r"\b(master|masters|msc|m\.sc|m\.a|m\.s|m\.e|m\.tech|ms|ma|mba|postgraduate)\b", re.IGNORECASE)
+PHD_PATTERN = re.compile(r"\b(phd|ph\.d|doctorate|doctoral|md|j\.d|jd)\b", re.IGNORECASE)
+
+def parse_education(text):
+    edu = {
+        "bachelor_edu": [],
+        "master_edu": [],
+        "phd_edu": [],
+        "other_edu": []
+    }
+    
+    if not text:
+        return edu
+        
+    # Split the section by newlines or bullet points
+    parts = re.split(r"[\n•]+", text)
+    
+    for part in parts:
+        part = part.strip()
+        if not part: 
+            continue
+            
+        if PHD_PATTERN.search(part):
+            edu["phd_edu"].append(part)
+        elif MASTER_PATTERN.search(part):
+            edu["master_edu"].append(part)
+        elif BACHELOR_PATTERN.search(part):
+            edu["bachelor_edu"].append(part)
+        else:
+            edu["other_edu"].append(part)
+            
+    return edu
+
+
 def extract_resume_info(text):
     sections = extract_sections(text)
     sections = fix_missing_sections(sections, text)
 
-    def flatten_text(value):
-        if isinstance(value, dict):
-            flattened = []
-            for item in value.values():
-                flattened.append(flatten_text(item))
-            return " ".join(part for part in flattened if part)
-        if isinstance(value, list):
-            return " ".join(flatten_text(item) for item in value if flatten_text(item))
-        return str(value).strip() if value else ""
-
-    full_text = " ".join(
-        part for part in (flatten_text(value) for value in sections.values()) if part
-    )
+    full_text = "\n".join(sections.values())
     header_text = sections.get("header", "")
 
     skills_text = sections.get("skills", "")
@@ -650,26 +693,24 @@ def extract_resume_info(text):
 
     contact_text = text or ""
 
-    combined_contact_text = "\n".join(
-        part
-        for part in [
-            flatten_text(contact_text),
-            flatten_text(clean_text(contact_text)),
-            flatten_text(header_text),
-            flatten_text(full_text),
-        ]
-        if part
-    )
+    combined_contact_text = "\n".join([
+        contact_text,
+        clean_text(contact_text),
+        header_text,
+        full_text,
+    ])
 
     email = extract_email(combined_contact_text)
     phone_number = extract_phone_number(combined_contact_text)
     location = extract_location(combined_contact_text)
+    name = extract_name(header_text or text)
 
     return {
+        "name": name,
         "header": sections.get("header", ""),
         "summary": sections.get("summary", ""),
         "experience": sections.get("experience", ""),
-        "education": extract_structured_education(sections.get("education", "")),
+        "education": parse_education(sections.get("education", "")),
         "skills_section": sections.get("skills", ""),
         "projects": sections.get("projects", ""),
         "certifications": sections.get("certifications", ""),

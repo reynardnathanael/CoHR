@@ -42,8 +42,11 @@
           <div>
             <p class="text-sm text-slate-500">Rank #{{ index + 1 }}</p>
             <h2 class="text-xl font-semibold text-slate-900">
-              {{ candidate.file_name || "Unnamed resume" }}
+              {{ candidate.name || candidate.file_name?.replace(/\.pdf$/i, '') || "Unnamed Candidate" }}
             </h2>
+            <p class="text-xs text-indigo-500 font-medium mt-1 flex items-center gap-1">
+              <i class="pi pi-file-pdf"></i> {{ candidate.file_name }}
+            </p>
             <p class="text-sm text-slate-500 mt-1">
               {{ candidate.email || "Email not found" }}
               <span v-if="candidate.phone_number">

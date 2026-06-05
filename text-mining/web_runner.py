@@ -78,6 +78,7 @@ def build_fast_output(job_description, file_paths):
         raw_for_screening.append(sanitized)
         candidates.append(
             {
+                "name": resume.get("name", ""),
                 "file_name": resume.get("file_name", ""),
                 "similarity_score": resume.get("similarity_score", 0.0),
                 "embedding_score": resume.get("embedding_score", 0.0),

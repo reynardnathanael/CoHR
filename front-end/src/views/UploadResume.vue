@@ -204,6 +204,7 @@ const createPostFile = async () => {
     files.forEach((file) => {
         formData.append('files', file);
     });
+    formData.append('job_title', selectedRole.value?.name || 'Uploaded Job');
     formData.append('job_description', jobDescription.value);
 
     loading.value = true;
