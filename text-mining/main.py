@@ -5,6 +5,12 @@ from agents import build_job_profile, parse_resume_agent, screen_candidate
 from parser import parse_pdf_with_docling
 from extractor import extract_resume_info
 from similarity import calculate_similarity
+from pdf_parser_safe import normalize_layout_text, parse_pdf_layout_safe
+from resume_merger import merge_resume_outputs
+from resume_schema import validate_resume_schema
+
+
+USE_HYBRID_RESUME_PARSER = True
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -63,8 +69,28 @@ def main():
         try:
             print(f"Parsing: {pdf_file.name}")
 
-            raw_text = parse_pdf_with_docling(pdf_file)
-            llm_resume = parse_resume_agent(raw_text)
+            if USE_HYBRID_RESUME_PARSER:
+                try:
+                    layout = parse_pdf_layout_safe(pdf_file)
+                    if layout.get("success") and str(layout.get("raw_text", "")).strip():
+                        raw_text = normalize_layout_text(layout)
+                    else:
+                        raw_text = parse_pdf_with_docling(pdf_file)
+                    deterministic_info = extract_resume_info(raw_text)
+                    llm_resume = parse_resume_agent(raw_text, deterministic_info=deterministic_info)
+                    resume_info = validate_resume_schema(
+                        merge_resume_outputs(deterministic_info, llm_resume, raw_text)
+                    )
+                except Exception:
+                    raw_text = parse_pdf_with_docling(pdf_file)
+                    llm_resume = parse_resume_agent(raw_text, deterministic_info=extract_resume_info(raw_text))
+                    resume_info = extract_resume_info(raw_text)
+                    resume_info["llm_resume"] = llm_resume
+            else:
+                raw_text = parse_pdf_with_docling(pdf_file)
+                llm_resume = parse_resume_agent(raw_text, deterministic_info=extract_resume_info(raw_text))
+                resume_info = extract_resume_info(raw_text)
+                resume_info["llm_resume"] = llm_resume
 
             print("\n===== RAW TEXT PREVIEW =====")
             print(raw_text[:1000])
@@ -85,10 +111,10 @@ def main():
             print("Confidence:", _join_or_blank(llm_resume.get("confidence_scores", {})))
             print()
 
-            resume_info = extract_resume_info(raw_text)
+            if "llm_resume" not in resume_info:
+                resume_info["llm_resume"] = llm_resume
             resume_info["file_name"] = pdf_file.name
             resume_info["full_text"] = raw_text
-            resume_info["llm_resume"] = llm_resume
 
             resumes.append(resume_info)
         except Exception as exc:
@@ -110,7 +136,7 @@ def main():
         print("Fit Category:", screening["fit_category"])
         print("Screening Score:", screening["score"], "%")
         print("Strengths:", _join_or_blank(screening.get("strengths", [])))
-        print("Missing Requirements:", screening["missing_requirements"])
+        print("Missing Requirements:", _join_or_blank(screening.get("missing_requirements", [])))
         print("Explanation:", screening["explanation"])
 
 

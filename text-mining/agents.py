@@ -6,6 +6,7 @@ import urllib.request
 from typing import Any, Dict, List, Optional
 
 from extractor import (
+    build_resume_context,
     extract_resume_info,
     extract_skills_with_skillner,
     normalize_skill_name,
@@ -111,6 +112,113 @@ def _safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
             return None
 
 
+def _ensure_list(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def _looks_like_education_noise(text: str) -> bool:
+    lowered = (text or "").lower().strip()
+    if not lowered:
+        return True
+    if re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b", lowered) or re.search(r"\b\d{4}\b", lowered):
+        return True
+    if any(keyword in lowered for keyword in ["university", "college", "institute", "school", "academy", "advisor", "research focus"]):
+        return True
+    return False
+
+
+def _ensure_education(value: Any) -> Dict[str, List[str]]:
+    empty = {
+        "bachelor_edu": [],
+        "master_edu": [],
+        "phd_edu": [],
+        "other_edu": [],
+    }
+    if isinstance(value, dict):
+        for key in empty:
+            bucket = value.get(key, [])
+            if isinstance(bucket, list):
+                cleaned_bucket = []
+                for item in bucket:
+                    if isinstance(item, dict):
+                        cleaned_bucket.append(item)
+                    elif str(item).strip():
+                        text = str(item).strip()
+                        if not _looks_like_education_noise(text):
+                            cleaned_bucket.append({"raw_text": text})
+                empty[key] = cleaned_bucket
+            elif isinstance(bucket, dict):
+                empty[key] = [bucket]
+            elif isinstance(bucket, str) and bucket.strip():
+                text = bucket.strip()
+                if not _looks_like_education_noise(text):
+                    empty[key] = [{"raw_text": text}]
+    elif isinstance(value, list):
+        cleaned_bucket = []
+        for item in value:
+            if isinstance(item, dict):
+                cleaned_bucket.append(item)
+            elif str(item).strip():
+                text = str(item).strip()
+                if not _looks_like_education_noise(text):
+                    cleaned_bucket.append({"raw_text": text})
+        empty["other_edu"] = cleaned_bucket
+    elif isinstance(value, str) and value.strip():
+        text = value.strip()
+        if not _looks_like_education_noise(text):
+            empty["other_edu"] = [{"raw_text": text}]
+    return empty
+
+
+def _ensure_entry_list(value: Any) -> List[Dict[str, Any]]:
+    if isinstance(value, list):
+        cleaned = []
+        for item in value:
+            if isinstance(item, dict):
+                cleaned.append(item)
+            elif str(item).strip():
+                cleaned.append({"raw_text": str(item).strip()})
+        return cleaned
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, str) and value.strip():
+        return [{"raw_text": value.strip()}]
+    return []
+
+
+def _normalize_skill_list(values: Any) -> List[str]:
+    normalized = []
+    seen = set()
+    for item in _ensure_list(values):
+        skill = normalize_skill_name(item)
+        if skill and skill not in seen:
+            seen.add(skill)
+            normalized.append(skill)
+    return sorted(normalized)
+
+
+def _extract_evidence_lines(*values: Any) -> List[str]:
+    evidence = []
+    seen = set()
+    for value in values:
+        if isinstance(value, str):
+            chunks = re.split(r"[\n•;]+", value)
+        elif isinstance(value, list):
+            chunks = value
+        else:
+            chunks = []
+        for chunk in chunks:
+            text = str(chunk).strip()
+            if text and text not in seen:
+                seen.add(text)
+                evidence.append(text)
+    return evidence[:12]
+
+
 def ollama_available() -> bool:
     try:
         # Check the base URL to see if the Ollama service is alive
@@ -146,24 +254,11 @@ def call_ollama(prompt: str, *, system: str = "", model: Optional[str] = None) -
 
 def _fallback_resume_schema(text: str) -> Dict[str, Any]:
     extracted = extract_resume_info(text)
-    skills = extracted.get("extracted_skills", []) or []
+    context = build_resume_context(text)
+    skills = extracted.get("skills", extracted.get("extracted_skills", [])) or []
     normalized_text = (text or "").lower()
     education = extracted.get("education", {}) or {}
-
-    def normalize_education_bucket(value: Any) -> List[str]:
-        if isinstance(value, list):
-            return [str(item).strip() for item in value if str(item).strip()]
-        if isinstance(value, str) and value.strip():
-            return [value.strip()]
-        return []
-
-    def split_items(value: Any) -> List[str]:
-        if isinstance(value, list):
-            return [str(item).strip() for item in value if str(item).strip()]
-        if isinstance(value, str) and value.strip():
-            parts = re.split(r"[•\n;/|,]+", value)
-            return [part.strip() for part in parts if part.strip()]
-        return []
+    sections = context.get("sections", {}) or {}
 
     def extract_tools(source_text: str, extra_values: List[str]) -> List[str]:
         found = []
@@ -190,20 +285,22 @@ def _fallback_resume_schema(text: str) -> Dict[str, Any]:
 
         return sorted(found)
 
-    tools = extract_tools(normalized_text, list(skills))
+    tools = extract_tools(normalized_text, list(skills)) or list(skills)
+    experience_entries = _ensure_entry_list(extracted.get("experience", []))
+    project_entries = _ensure_entry_list(extracted.get("projects", []))
+    education_entries = _ensure_education(education)
+    certifications_text = extracted.get("certifications", "")
 
     return {
+        "contact": extracted.get("contact", {}),
+        "name": extracted.get("name", ""),
+        "summary": extracted.get("summary", ""),
         "skills": sorted({normalize_skill_name(skill) for skill in skills if skill}),
-        "tools": tools,
-        "education": {
-            "bachelor_edu": normalize_education_bucket(education.get("bachelor_edu")),
-            "master_edu": normalize_education_bucket(education.get("master_edu")),
-            "phd_edu": normalize_education_bucket(education.get("phd_edu")),
-            "other_edu": normalize_education_bucket(education.get("other_edu")),
-        },
-        "experience": split_items(extracted.get("experience", "")),
-        "projects": split_items(extracted.get("projects", "")),
-        "certifications": split_items(extracted.get("certifications", "")),
+        "tools": sorted({normalize_skill_name(skill) for skill in tools if skill}),
+        "education": education_entries,
+        "experience": experience_entries,
+        "projects": project_entries,
+        "certifications": _ensure_list(certifications_text),
         "achievements": [],
         "languages": [],
         "personal_identifiers_removed": True,
@@ -211,16 +308,22 @@ def _fallback_resume_schema(text: str) -> Dict[str, Any]:
         "confidence_scores": {
             "skills": 0.7 if skills else 0.0,
             "tools": 0.6 if tools else 0.0,
-            "education": 0.6 if extracted.get("education") else 0.0,
-            "experience": 0.6 if extracted.get("experience") else 0.0,
-            "projects": 0.5 if extracted.get("projects") else 0.0,
-            "certifications": 0.4 if extracted.get("certifications") else 0.0,
+            "education": 0.6 if any(education_entries.values()) else 0.0,
+            "experience": 0.6 if experience_entries else 0.0,
+            "projects": 0.5 if project_entries else 0.0,
+            "certifications": 0.4 if certifications_text else 0.0,
             "languages": 0.0,
         },
         "parsing_notes": [
             "Deterministic fallback parser built from section extraction.",
         ],
         "warnings": [],
+        "evidence": {
+            "header": context.get("header", ""),
+            "sections": sections,
+            "contact_candidates": context.get("contact_candidates", {}),
+            "skill_candidates": context.get("skill_candidates", []),
+        },
     }
 
 
@@ -232,34 +335,117 @@ def _merge_agent_output(base: Dict[str, Any], parsed: Dict[str, Any]) -> Dict[st
     return output
 
 
-def parse_resume_agent(text: str, *, model: Optional[str] = None, retries: int = 2) -> Dict[str, Any]:
+def _normalize_resume_output(base: Dict[str, Any], parsed: Dict[str, Any]) -> Dict[str, Any]:
+    merged = _merge_agent_output(base, parsed)
+    contact = merged.get("contact", {})
+    if not isinstance(contact, dict):
+        contact = {
+            "name": merged.get("name", ""),
+            "email": merged.get("email", ""),
+            "phone_number": merged.get("phone_number", ""),
+            "location": merged.get("location", ""),
+            "urls": merged.get("urls", []),
+        }
+    contact["name"] = str(contact.get("name", merged.get("name", ""))).strip()
+    contact["email"] = str(contact.get("email", merged.get("email", ""))).strip()
+    contact["phone_number"] = str(contact.get("phone_number", merged.get("phone_number", ""))).strip()
+    contact["location"] = str(contact.get("location", merged.get("location", ""))).strip()
+    contact["urls"] = _ensure_list(contact.get("urls", []))
+    merged["contact"] = contact
+    merged["summary"] = str(merged.get("summary", "")).strip()
+    merged["skills"] = _normalize_skill_list(merged.get("skills", []))
+    merged["tools"] = _normalize_skill_list(merged.get("tools", []))
+    merged["education"] = _ensure_education(merged.get("education", {}))
+    merged["experience"] = _ensure_entry_list(merged.get("experience", []))
+    merged["projects"] = _ensure_entry_list(merged.get("projects", []))
+    merged["certifications"] = _ensure_list(merged.get("certifications", []))
+    merged["achievements"] = _ensure_list(merged.get("achievements", []))
+    merged["languages"] = _ensure_list(merged.get("languages", []))
+    merged["missing_sections"] = _ensure_list(merged.get("missing_sections", []))
+    merged["warnings"] = _ensure_list(merged.get("warnings", []))
+    merged["parsing_notes"] = _ensure_list(merged.get("parsing_notes", []))
+    merged["confidence_scores"] = {
+        key: float(value)
+        for key, value in dict(merged.get("confidence_scores", {})).items()
+        if isinstance(value, (int, float))
+    }
+    merged["field_evidence"] = dict(merged.get("field_evidence", {}))
+    return merged
+
+
+def parse_resume_agent(
+    text: str,
+    *,
+    model: Optional[str] = None,
+    retries: int = 2,
+    deterministic_info: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     base = _fallback_resume_schema(text)
-    base["missing_sections"] = [
-        section
-        for section in ["skills", "tools", "education", "experience", "projects", "certifications", "languages"]
-        if not base.get(section)
-    ]
+    education = base.get("education", {}) if isinstance(base.get("education"), dict) else {}
+    contact = base.get("contact", {}) if isinstance(base.get("contact"), dict) else {}
+    base["missing_sections"] = []
+    if not any(str(contact.get(key, "")).strip() for key in ["name", "email", "phone_number", "location"]):
+        base["missing_sections"].append("contact")
+    if not str(base.get("summary", "")).strip():
+        base["missing_sections"].append("summary")
+    if not base.get("skills"):
+        base["missing_sections"].append("skills")
+    if not any(education.get(bucket) for bucket in ["bachelor_edu", "master_edu", "phd_edu", "other_edu"]):
+        base["missing_sections"].append("education")
+    if not base.get("experience"):
+        base["missing_sections"].append("experience")
+    if not base.get("projects"):
+        base["missing_sections"].append("projects")
+    if not base.get("certifications"):
+        base["missing_sections"].append("certifications")
+    if not base.get("languages"):
+        base["missing_sections"].append("languages")
+    context = build_resume_context(text)
+    evidence_text = "\n".join(
+        _extract_evidence_lines(
+            context.get("header", ""),
+            context.get("summary", ""),
+            context.get("skills", ""),
+            context.get("experience", ""),
+            context.get("projects", ""),
+            context.get("certifications", ""),
+            list(context.get("skill_candidates", [])),
+        )
+    )
     prompt = f"""
-Extract resume data as strict JSON with these keys:
-skills, tools, education, experience, projects, certifications,
-achievements, languages, personal_identifiers_removed, missing_sections,
-confidence_scores, parsing_notes, warnings
+You are a resume information extraction agent.
+Extract the resume into strict JSON with these keys:
+contact, summary, skills, tools, education, experience, projects,
+certifications, languages, personal_identifiers_removed, missing_sections,
+confidence_scores, parsing_notes, warnings, field_evidence
 
 Rules:
-- Preserve the factual content from the resume sections.
-- Put programming languages, frameworks, databases, cloud/devops tools, IDEs, and libraries in tools.
-- If a section is missing, keep it as an empty array.
+- Use the provided evidence and section candidates as your source of truth.
+- Preserve factual content only. Do not invent details.
+- Put programming languages, frameworks, databases, cloud/devops tools, IDEs, and libraries in skills.
+- `tools` may mirror `skills` for backward compatibility.
+- Use arrays for list fields. Use structured objects for education, experience, and projects.
+- Education objects must use bucket-specific keys such as `bachelor_university`, `master_university`, `phd_university`, plus `start_date`, `end_date`, `degree`, `major`, `details`, and `raw_text`.
+- Experience objects must use `experience_title`, `experience_description`, `experience_date`, `company`, `location`, and `raw_text`.
+- Project objects must use `project_title`, `project_desc`, `project_date`, `technologies`, and `raw_text`.
+- Put university names and date ranges inside the correct education bucket entry. `other_edu` is only for genuinely uncategorized education facts, not university names, date ranges, or advisor/research-focus lines.
 - confidence_scores must be numbers between 0 and 1.
-- missing_sections must list any absent major sections.
-- Use arrays for list fields.
+- field_evidence should map each field to short source snippets.
+- If a value is absent, return an empty string or empty array as appropriate.
 - Return JSON only.
+
+Evidence and section candidates:
+{json.dumps(context, ensure_ascii=True)}
 
 Resume text:
 {text}
+
+Candidate evidence snippets:
+{evidence_text}
 """.strip()
 
     if not ollama_available():
-        fallback = dict(base)
+        fallback = dict(deterministic_info or base)
         fallback["parsing_notes"] = [
             "Ollama unavailable; used deterministic fallback parser.",
             *fallback.get("parsing_notes", []),
@@ -272,24 +458,37 @@ Resume text:
             raw = call_ollama(prompt, system="You are a precise resume parsing assistant.", model=model)
             parsed = _safe_json_loads(raw)
             if parsed:
-                merged = _merge_agent_output(base, parsed)
+                merged = _normalize_resume_output(base, parsed)
+                merged["name"] = str(merged.get("name", "")).strip()
+                merged["email"] = str(merged.get("email", "")).strip()
+                merged["phone_number"] = str(merged.get("phone_number", "")).strip()
+                merged["location"] = str(merged.get("location", "")).strip()
                 merged["missing_sections"] = merged.get("missing_sections", base.get("missing_sections", []))
                 merged["parsing_notes"] = [
                     *base.get("parsing_notes", []),
                     *(_listify(merged.get("parsing_notes", []))),
                 ]
                 merged["warnings"] = _listify(merged.get("warnings", []))
+                merged["field_evidence"] = {
+                    **dict(base.get("evidence", {})),
+                    **dict(merged.get("field_evidence", {})),
+                }
+                if deterministic_info:
+                    merged.setdefault("deterministic_info", deterministic_info)
                 return merged
             last_error = "Invalid JSON returned by the model."
         except (urllib.error.URLError, TimeoutError, ValueError) as exc:
             last_error = str(exc)
 
-    fallback = dict(base)
+    fallback = dict(deterministic_info or base)
     fallback["parsing_notes"] = [
         *base.get("parsing_notes", []),
         "Failed to parse LLM output; used fallback parser.",
     ]
     fallback["warnings"] = [last_error] if last_error else []
+    fallback["field_evidence"] = dict(base.get("evidence", {}))
+    if deterministic_info:
+        fallback.setdefault("deterministic_info", deterministic_info)
     return fallback
 
 
@@ -341,7 +540,21 @@ Job description:
 
 def _listify(value: Any) -> List[str]:
     if isinstance(value, list):
-        return [str(item) for item in value if str(item).strip()]
+        flattened = []
+        for item in value:
+            if isinstance(item, dict):
+                text = " ".join(
+                    str(v).strip()
+                    for v in item.values()
+                    if str(v).strip()
+                ).strip()
+                if text:
+                    flattened.append(text)
+            else:
+                text = str(item).strip()
+                if text:
+                    flattened.append(text)
+        return flattened
     if isinstance(value, str) and value.strip():
         return [value.strip()]
     return []
@@ -375,7 +588,9 @@ def _score_overlap(required: List[str], candidate: List[str]) -> Dict[str, Any]:
 
 def screen_candidate(job_profile: Dict[str, Any], resume: Dict[str, Any], *, model: Optional[str] = None) -> Dict[str, Any]:
     # 1. FALLBACK MATH LOGIC (Used if Ollama is down)
-    skills = resume.get("extracted_skills", [])
+    skills = resume.get("skills", resume.get("extracted_skills", []))
+    if not skills and isinstance(resume.get("llm_resume"), dict):
+        skills = resume["llm_resume"].get("skills", [])
     projects = _listify(resume.get("projects", ""))
     education = _normalize_education(resume.get("education", {}))
     experience = _listify(resume.get("experience", ""))
@@ -421,7 +636,16 @@ def screen_candidate(job_profile: Dict[str, Any], resume: Dict[str, Any], *, mod
 You are an elite Senior Technical Recruiter. Evaluate the candidate against the job requirements.
 
 Job Requirements: {json.dumps(job_profile)}
-Candidate Resume: {resume.get('full_text', resume.get('experience', ''))}
+Candidate Resume: {json.dumps({
+    "name": resume.get("name", ""),
+    "skills": skills,
+    "education": education,
+    "experience": experience,
+    "projects": projects,
+    "certifications": certifications,
+    "full_text": resume.get("full_text", resume.get("experience", "")),
+    "llm_resume": resume.get("llm_resume", {}),
+}, ensure_ascii=True)}
 
 Based on your reasoning, provide ONLY a valid JSON object with the following exact keys:
 - "fit_category": exactly one of "Strong Fit", "Potential Fit", or "Weak Fit".

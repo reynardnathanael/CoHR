@@ -104,7 +104,9 @@ def build_weighted_candidate_text(resume):
         if text:
             parts.extend([text] * weight)
 
-    skills = resume.get("extracted_skills", [])
+    skills = resume.get("skills", resume.get("extracted_skills", []))
+    if not skills and isinstance(resume.get("llm_resume"), dict):
+        skills = resume["llm_resume"].get("skills", [])
 
     if isinstance(skills, list):
         skills_text = " ".join(skills)
@@ -162,7 +164,11 @@ def calculate_similarity(
 
         skill_score, matched_skills = calculate_skill_overlap(
             job_skills,
-            resume.get("extracted_skills", [])
+            resume.get("skills", resume.get("extracted_skills", [])) or (
+                resume.get("llm_resume", {}).get("skills", [])
+                if isinstance(resume.get("llm_resume"), dict)
+                else []
+            )
         )
 
         final_score = (

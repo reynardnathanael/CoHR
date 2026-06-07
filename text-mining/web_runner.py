@@ -7,9 +7,15 @@ import warnings
 from pathlib import Path
 
 from extractor import extract_resume_info
-from agents import build_job_profile, screen_candidate
+from agents import build_job_profile, parse_resume_agent, screen_candidate
 from parser import parse_pdf_with_docling
 from similarity import calculate_similarity
+from pdf_parser_safe import normalize_layout_text, parse_pdf_layout_safe
+from resume_merger import merge_resume_outputs
+from resume_schema import validate_resume_schema
+
+
+USE_HYBRID_RESUME_PARSER = True
 
 
 def _flatten_text(value):
@@ -39,10 +45,33 @@ def build_fast_output(job_description, file_paths):
         file_name = file_path_obj.name
 
         try:
-            raw_text = parse_pdf_with_docling(file_path_obj)
-            resume_info = extract_resume_info(raw_text)
+            if USE_HYBRID_RESUME_PARSER:
+                try:
+                    layout = parse_pdf_layout_safe(file_path_obj)
+                    if layout.get("success") and str(layout.get("raw_text", "")).strip():
+                        raw_text = normalize_layout_text(layout)
+                    else:
+                        raw_text = parse_pdf_with_docling(file_path_obj)
+                    deterministic_info = extract_resume_info(raw_text)
+                    llm_info = parse_resume_agent(raw_text, deterministic_info=deterministic_info)
+                    merged_info = merge_resume_outputs(deterministic_info, llm_info, raw_text)
+                    resume_info = validate_resume_schema(merged_info)
+                except Exception:
+                    raw_text = parse_pdf_with_docling(file_path_obj)
+                    resume_info = extract_resume_info(raw_text)
+                    llm_info = parse_resume_agent(raw_text, deterministic_info=resume_info)
+                    resume_info["llm_resume"] = llm_info
+            else:
+                raw_text = parse_pdf_with_docling(file_path_obj)
+                resume_info = extract_resume_info(raw_text)
+                llm_info = parse_resume_agent(raw_text, deterministic_info=resume_info)
+                resume_info["llm_resume"] = llm_info
+
             resume_info["file_name"] = file_name
             resume_info["full_text"] = raw_text
+            if "llm_resume" not in resume_info:
+                resume_info["llm_resume"] = llm_info
+            resume_info["extraction"] = {"source": "hybrid_parser" if USE_HYBRID_RESUME_PARSER else "legacy_parser", "resume": resume_info.get("llm_resume", {})}
             resumes.append(resume_info)
         except Exception as exc:
             failed_files.append({"file_name": file_name, "error": str(exc)})
@@ -53,11 +82,12 @@ def build_fast_output(job_description, file_paths):
     ranked_resumes = calculate_similarity(job_description, resumes)
 
     candidates = []
-    # Prepare a sanitized list of resumes suitable for the screening function
-    # (avoid embedding non-serializable types like sets into the final JSON)
     raw_for_screening = []
     for resume in ranked_resumes:
-        education = resume.get("education", {})
+        llm_resume = resume.get("llm_resume", {}) or {}
+        education = llm_resume.get("education") if isinstance(llm_resume, dict) else {}
+        if not isinstance(education, dict):
+            education = resume.get("education", {})
         if not isinstance(education, dict):
             education = {
                 "bachelor_edu": [],
@@ -65,14 +95,15 @@ def build_fast_output(job_description, file_paths):
                 "phd_edu": [],
                 "other_edu": [str(education).strip()] if str(education).strip() else [],
             }
-        # Build a sanitized copy of the resume for use by the screening agent
+
         sanitized = {
-            "extracted_skills": resume.get("extracted_skills", []),
+            "skills": llm_resume.get("skills", []) if isinstance(llm_resume, dict) and llm_resume.get("skills") else resume.get("skills", resume.get("extracted_skills", [])),
+            "extracted_skills": llm_resume.get("skills", []) if isinstance(llm_resume, dict) and llm_resume.get("skills") else resume.get("skills", resume.get("extracted_skills", [])),
             "matched_skills": resume.get("matched_skills", []),
             "education": education,
-            "experience": resume.get("experience", ""),
-            "projects": resume.get("projects", ""),
-            "certifications": resume.get("certifications", ""),
+            "experience": llm_resume.get("experience", resume.get("experience", "")),
+            "projects": llm_resume.get("projects", resume.get("projects", "")),
+            "certifications": llm_resume.get("certifications", resume.get("certifications", "")),
             "full_text": resume.get("full_text", ""),
         }
         raw_for_screening.append(sanitized)
@@ -84,21 +115,21 @@ def build_fast_output(job_description, file_paths):
                 "embedding_score": resume.get("embedding_score", 0.0),
                 "skill_score": resume.get("skill_score", 0.0),
                 "matched_skills": [str(item).strip() for item in resume.get("matched_skills", []) if str(item).strip()],
-                "extracted_skills": [str(item).strip() for item in resume.get("extracted_skills", []) if str(item).strip()],
-                "screening": None,  # To be filled later via Progressive Rendering
-                        "education": education,
-                        # Preserve structured fields (lists/dicts) so the frontend can render them nicely
-                        "experience": resume.get("experience", []),
-                        "projects": resume.get("projects", []),
-                        "certifications": resume.get("certifications", []),
-                        "achievements": resume.get("achievements", []),
-                        "languages": resume.get("languages", []),
-                        "summary": resume.get("summary", ""),
-                        "email": resume.get("email", ""),
-                        "phone_number": resume.get("phone_number", ""),
-                        "location": resume.get("location", ""),
-                        # Keep raw full text (not flattened) so frontend can show it with preserved newlines
-                        "full_text": resume.get("full_text", ""),
+                "skills": [str(item).strip() for item in resume.get("skills", resume.get("extracted_skills", [])) if str(item).strip()],
+                "extracted_skills": [str(item).strip() for item in resume.get("skills", resume.get("extracted_skills", [])) if str(item).strip()],
+                "screening": None,
+                "education": education,
+                "experience": llm_resume.get("experience", resume.get("experience", [])) if isinstance(llm_resume, dict) else resume.get("experience", []),
+                "projects": llm_resume.get("projects", resume.get("projects", [])) if isinstance(llm_resume, dict) else resume.get("projects", []),
+                "certifications": llm_resume.get("certifications", resume.get("certifications", [])) if isinstance(llm_resume, dict) else resume.get("certifications", []),
+                "achievements": llm_resume.get("achievements", resume.get("achievements", [])) if isinstance(llm_resume, dict) else resume.get("achievements", []),
+                "languages": llm_resume.get("languages", resume.get("languages", [])) if isinstance(llm_resume, dict) else resume.get("languages", []),
+                "summary": resume.get("summary", ""),
+                "email": llm_resume.get("email", resume.get("email", "")) if isinstance(llm_resume, dict) else resume.get("email", ""),
+                "phone_number": llm_resume.get("phone_number", resume.get("phone_number", "")) if isinstance(llm_resume, dict) else resume.get("phone_number", ""),
+                "location": llm_resume.get("location", resume.get("location", "")) if isinstance(llm_resume, dict) else resume.get("location", ""),
+                "llm_resume": llm_resume,
+                "full_text": resume.get("full_text", ""),
             }
         )
 

@@ -640,6 +640,410 @@ BACHELOR_PATTERN = re.compile(r"\b(bachelor|bachelors|bsc|b\.sc|b\.a|b\.s|b\.e|b
 MASTER_PATTERN = re.compile(r"\b(master|masters|msc|m\.sc|m\.a|m\.s|m\.e|m\.tech|ms|ma|mba|postgraduate)\b", re.IGNORECASE)
 PHD_PATTERN = re.compile(r"\b(phd|ph\.d|doctorate|doctoral|md|j\.d|jd)\b", re.IGNORECASE)
 
+DATE_RANGE_PATTERN = re.compile(
+    r"(?P<start>"
+    r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|"
+    r"Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[.\s-]*\d{4}"
+    r"|\d{4}"
+    r")\s*(?:-|–|—|to|through|until|until\s+)?\s*"
+    r"(?P<end>"
+    r"(?:present|current|now|Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|"
+    r"Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[.\s-]*\d{4}?"
+    r"|\d{4}"
+    r")",
+    re.IGNORECASE,
+)
+
+SINGLE_DATE_PATTERN = re.compile(
+    r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|"
+    r"Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[.\s-]*\d{4}\b|\b\d{4}\b",
+    re.IGNORECASE,
+)
+
+
+def _split_candidate_blocks(text):
+    if not text:
+        return []
+
+    cleaned = clean_section_text(text)
+    blocks = []
+    current = []
+
+    for line in cleaned.splitlines():
+        line = line.strip()
+        if not line:
+            if current:
+                blocks.append("\n".join(current).strip())
+                current = []
+            continue
+
+        current.append(line.lstrip("•-*— ").strip())
+
+    if current:
+        blocks.append("\n".join(current).strip())
+
+    return [block for block in blocks if block]
+
+
+def _extract_date_range(text):
+    if not text:
+        return "", ""
+
+    match = DATE_RANGE_PATTERN.search(text)
+    if match:
+        start = re.sub(r"\s+", " ", match.group("start") or "").strip(" ,;:-")
+        end = re.sub(r"\s+", " ", match.group("end") or "").strip(" ,;:-")
+        return start, end
+
+    dates = SINGLE_DATE_PATTERN.findall(text)
+    dates = [re.sub(r"\s+", " ", date).strip(" ,;:-") for date in dates if date]
+    if len(dates) >= 2:
+        return dates[0], dates[1]
+    if len(dates) == 1:
+        return dates[0], ""
+
+    return "", ""
+
+
+def _is_date_like(text):
+    if not text:
+        return False
+    return bool(DATE_RANGE_PATTERN.search(text) or SINGLE_DATE_PATTERN.search(text))
+
+
+def _extract_org_candidates(text):
+    if not text:
+        return []
+
+    candidates = []
+    keyword_lines = []
+    org_keywords = (
+        "university", "college", "institute", "school", "academy", "company",
+        "corp", "corporation", "inc", "ltd", "llc", "laboratory", "lab",
+        "center", "centre", "association", "foundation"
+    )
+
+    for line in text.splitlines():
+        lowered = line.lower()
+        if any(keyword in lowered for keyword in org_keywords):
+            cleaned = re.sub(r"\s+", " ", line).strip(" ,;:-")
+            if cleaned and cleaned not in keyword_lines:
+                keyword_lines.append(cleaned)
+
+    doc = _nlp(text)
+    for ent in doc.ents:
+        if ent.label_ == "ORG":
+            value = re.sub(r"\s+", " ", ent.text).strip(" ,;:-")
+            if value and value not in candidates:
+                candidates.append(value)
+    for item in keyword_lines:
+        if item not in candidates:
+            candidates.append(item)
+    return candidates
+
+
+def _extract_urls(text):
+    if not text:
+        return []
+    urls = []
+    for match in re.findall(r"https?://\S+|www\.\S+", text, flags=re.IGNORECASE):
+        cleaned = match.strip(").,;]")
+        if cleaned and cleaned not in urls:
+            urls.append(cleaned)
+    return urls
+
+
+def _extract_degree_text(part):
+    lines = [line.strip() for line in part.splitlines() if line.strip()]
+    for line in lines:
+        if BACHELOR_PATTERN.search(line) or MASTER_PATTERN.search(line) or PHD_PATTERN.search(line):
+            return re.sub(r"\s+", " ", line).strip()
+    return ""
+
+
+def _extract_major_text(part):
+    major_match = re.search(r"(?:major|speciali[sz]ation|field of study|concentration)\s*[:\-]?\s*([^,\n]+)", part, re.IGNORECASE)
+    if major_match:
+        return re.sub(r"\s+", " ", major_match.group(1)).strip(" ,;:-")
+    return ""
+
+
+def _extract_location_text(part):
+    location = extract_location(part)
+    if location:
+        return location
+    return ""
+
+
+def _infer_education_bucket(part):
+    if PHD_PATTERN.search(part):
+        return "phd_edu"
+    if MASTER_PATTERN.search(part):
+        return "master_edu"
+    if BACHELOR_PATTERN.search(part):
+        return "bachelor_edu"
+    return "other_edu"
+
+
+def _education_bucket_field(bucket):
+    if bucket == "bachelor_edu":
+        return "bachelor_university", "bachelor_degree", "bachelor_major"
+    if bucket == "master_edu":
+        return "master_university", "master_degree", "master_major"
+    if bucket == "phd_edu":
+        return "phd_university", "phd_degree", "phd_major"
+    return "other_university", "other_degree", "other_major"
+
+
+def _education_entry_template(bucket):
+    university_key, degree_key, major_key = _education_bucket_field(bucket)
+    return {
+        university_key: "",
+        degree_key: "",
+        major_key: "",
+        "start_date": "",
+        "end_date": "",
+        "details": [],
+        "raw_text": "",
+    }
+
+
+def _education_entry_is_empty(entry):
+    return not any(
+        value
+        for key, value in entry.items()
+        if key != "details" and key != "raw_text" and isinstance(value, str) and value.strip()
+    ) and not entry.get("details")
+
+
+def parse_education_detailed(text):
+    education = {
+        "bachelor_edu": [],
+        "master_edu": [],
+        "phd_edu": [],
+        "other_edu": [],
+    }
+
+    if not text:
+        return education
+
+    lines = [line.strip(" •-—\t") for line in clean_section_text(text).splitlines() if line.strip()]
+    current_bucket = None
+    current_entry = None
+    pending_university = ""
+    pending_dates = []
+
+    def finalize_entry():
+        nonlocal current_bucket, current_entry
+        if not current_entry:
+            return
+        if _education_entry_is_empty(current_entry):
+            current_bucket = None
+            current_entry = None
+            return
+        university_key, degree_key, major_key = _education_bucket_field(current_bucket)
+        clean_entry = {
+            university_key: current_entry.get(university_key, ""),
+            degree_key: current_entry.get(degree_key, ""),
+            major_key: current_entry.get(major_key, ""),
+            "start_date": current_entry.get("start_date", ""),
+            "end_date": current_entry.get("end_date", ""),
+            "details": current_entry.get("details", []),
+            "raw_text": "\n".join(
+                part for part in [
+                    current_entry.get(university_key, ""),
+                    " ".join(
+                        item for item in [
+                            current_entry.get("start_date", ""),
+                            current_entry.get("end_date", ""),
+                        ]
+                        if item
+                    ),
+                    current_entry.get(degree_key, ""),
+                    current_entry.get(major_key, ""),
+                    *current_entry.get("details", []),
+                ]
+                if part
+            ),
+        }
+        if current_bucket:
+            education[current_bucket].append(clean_entry)
+        current_bucket = None
+        current_entry = None
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        is_degree = bool(BACHELOR_PATTERN.search(line) or MASTER_PATTERN.search(line) or PHD_PATTERN.search(line))
+        is_date = _is_date_like(line)
+        org_candidates = _extract_org_candidates(line)
+        is_org = bool(org_candidates)
+
+        if is_degree:
+            if current_entry and current_entry.get("degree") and current_entry.get("degree") != line:
+                finalize_entry()
+            if current_entry is None:
+                current_bucket = _infer_education_bucket(line)
+                current_entry = _education_entry_template(current_bucket)
+            university_key, degree_key, major_key = _education_bucket_field(current_bucket)
+            current_entry[degree_key] = line
+            current_entry["degree"] = line
+            major_text = _extract_major_text(line)
+            if major_text:
+                current_entry[major_key] = major_text
+                current_entry["major"] = major_text
+            if pending_university and not current_entry[university_key]:
+                current_entry[university_key] = pending_university
+            if pending_dates and not current_entry.get("start_date"):
+                date_text = " ".join(pending_dates)
+                start_date, end_date = _extract_date_range(date_text)
+                current_entry["start_date"] = start_date
+                current_entry["end_date"] = end_date
+            pending_university = ""
+            pending_dates = []
+            continue
+
+        if is_date:
+            if current_entry is not None:
+                university_key, _, _ = _education_bucket_field(current_bucket)
+                if not current_entry.get("start_date") and not current_entry.get("end_date"):
+                    start_date, end_date = _extract_date_range(line)
+                    current_entry["start_date"] = start_date
+                    current_entry["end_date"] = end_date
+                elif current_entry.get(university_key) and current_entry.get("degree"):
+                    finalize_entry()
+                    pending_dates.append(line)
+                elif line not in current_entry.get("details", []):
+                    current_entry["details"].append(line)
+            else:
+                pending_dates.append(line)
+            continue
+
+        if is_org:
+            if current_entry is None:
+                pending_university = org_candidates[0]
+                continue
+
+            university_key, _, _ = _education_bucket_field(current_bucket)
+            if not current_entry.get(university_key):
+                current_entry[university_key] = org_candidates[0]
+            elif current_entry.get(university_key) and current_entry.get("start_date") and current_entry.get("degree"):
+                finalize_entry()
+                pending_university = org_candidates[0]
+            elif line not in current_entry.get("details", []):
+                current_entry["details"].append(line)
+            continue
+
+        if current_entry is None:
+            continue
+
+        if current_entry.get("degree") and line not in current_entry.get("details", []):
+            current_entry["details"].append(line)
+
+    finalize_entry()
+
+    # If we saw preamble lines before the first degree and never attached them,
+    # keep only genuinely uncategorized leftovers in other_edu.
+    if pending_university and not any(education.values()):
+        education["other_edu"].append({"other_text": pending_university, "raw_text": pending_university, "details": []})
+    if pending_dates and not any(education.values()):
+        date_text = " ".join(pending_dates).strip()
+        if date_text:
+            education["other_edu"].append({"other_text": date_text, "raw_text": date_text, "details": []})
+
+    return education
+
+
+def parse_experience_detailed(text):
+    experience = []
+    if not text:
+        return experience
+
+    for part in _split_candidate_blocks(text):
+        lines = [line.strip(" •-—") for line in part.splitlines() if line.strip()]
+        if not lines:
+            continue
+
+        start_date, end_date = _extract_date_range(part)
+        experience_date = " - ".join([item for item in [start_date, end_date] if item])
+        title = ""
+        company = ""
+
+        first_line = lines[0]
+        if "," in first_line:
+            title_candidate, company_candidate = [piece.strip() for piece in first_line.split(",", 1)]
+            title = title_candidate
+            company = company_candidate
+        else:
+            title = first_line
+
+        org_candidates = _extract_org_candidates(part)
+        if org_candidates:
+            company = company or org_candidates[0]
+
+        location = _extract_location_text(part)
+        description_lines = [
+            line for line in lines[1:]
+            if line not in {company, location, start_date, end_date}
+            and not _is_date_like(line)
+        ]
+        description = " ".join(description_lines).strip()
+        if not description and len(lines) > 1:
+            description = " ".join(lines[1:]).strip()
+
+        experience.append(
+            {
+                "experience_title": title,
+                "experience_description": description,
+                "experience_date": experience_date,
+                "company": company,
+                "location": location,
+                "raw_text": part,
+            }
+        )
+
+    return experience
+
+
+def parse_project_detailed(text):
+    projects = []
+    if not text:
+        return projects
+
+    for part in _split_candidate_blocks(text):
+        lines = [line.strip(" •-—") for line in part.splitlines() if line.strip()]
+        if not lines:
+            continue
+
+        start_date, end_date = _extract_date_range(part)
+        project_date = " - ".join([item for item in [start_date, end_date] if item])
+        title = lines[0]
+        if ":" in title:
+            title = title.split(":", 1)[0].strip()
+        if " - " in title:
+            title = title.split(" - ", 1)[0].strip()
+
+        techs = sorted({normalize_skill_name(skill) for skill in extract_skills_with_skillner(part) if skill})
+        description_lines = []
+        for line in lines[1:]:
+            if line not in {start_date, end_date} and not _is_date_like(line):
+                description_lines.append(line)
+        description = " ".join(description_lines).strip()
+
+        projects.append(
+            {
+                "project_title": title,
+                "project_desc": description,
+                "project_date": project_date,
+                "technologies": techs,
+                "raw_text": part,
+            }
+        )
+
+    return projects
+
 def parse_education(text):
     edu = {
         "bachelor_edu": [],
@@ -703,19 +1107,71 @@ def extract_resume_info(text):
     email = extract_email(combined_contact_text)
     phone_number = extract_phone_number(combined_contact_text)
     location = extract_location(combined_contact_text)
+    urls = _extract_urls(combined_contact_text)
     name = extract_name(header_text or text)
+    education_detail = parse_education_detailed(sections.get("education", ""))
+    experience_detail = parse_experience_detailed(sections.get("experience", ""))
+    project_detail = parse_project_detailed(sections.get("projects", ""))
 
     return {
         "name": name,
+        "contact": {
+            "name": name,
+            "email": email,
+            "phone_number": phone_number,
+            "location": location,
+            "urls": urls,
+        },
         "header": sections.get("header", ""),
         "summary": sections.get("summary", ""),
-        "experience": sections.get("experience", ""),
-        "education": parse_education(sections.get("education", "")),
+        "experience": experience_detail,
+        "experience_section": sections.get("experience", ""),
+        "education": education_detail,
+        "education_section": sections.get("education", ""),
         "skills_section": sections.get("skills", ""),
-        "projects": sections.get("projects", ""),
+        "projects": project_detail,
+        "projects_section": sections.get("projects", ""),
         "certifications": sections.get("certifications", ""),
+        "skills": extracted_skills,
+        "tools": extracted_skills,
         "extracted_skills": extracted_skills,
         "email": email,
         "phone_number": phone_number,
         "location": location,
+        "urls": urls,
+        "sections": sections,
+    }
+
+
+def build_resume_context(text):
+    """
+    Return a deterministic, section-aware view of the resume text.
+
+    This is intentionally lightweight: the AI agent should do the semantic
+    extraction, while this layer supplies normalized evidence and structure.
+    """
+    extracted = extract_resume_info(text)
+    sections = extracted.get("sections", {}) or extract_sections(text)
+
+    return {
+        "raw_text": text or "",
+        "sections": sections,
+        "header": sections.get("header", ""),
+        "summary": sections.get("summary", ""),
+        "experience": extracted.get("experience", []),
+        "education": extracted.get("education", {}),
+        "skills": extracted.get("skills", []),
+        "projects": extracted.get("projects", []),
+        "certifications": sections.get("certifications", ""),
+        "name_candidates": [extracted.get("name", "")] if extracted.get("name") else [],
+        "contact_candidates": {
+            "email": extracted.get("email", ""),
+            "phone_number": extracted.get("phone_number", ""),
+            "location": extracted.get("location", ""),
+            "urls": extracted.get("urls", []),
+        },
+        "skill_candidates": extracted.get("skills", extracted.get("extracted_skills", [])),
+        "education_candidates": extracted.get("education", {}),
+        "experience_candidates": extracted.get("experience", []),
+        "project_candidates": extracted.get("projects", []),
     }
