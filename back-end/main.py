@@ -10,6 +10,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -53,7 +54,8 @@ class SummaryRequest(BaseModel):
 
 def get_or_create_skill(db: Session, skill_name: str) -> models.Skill:
     sn = skill_name.strip()
-    skill = db.query(models.Skill).filter(models.Skill.skill_name == sn).first()
+    # Use func.lower() to perform a case-insensitive search and prevent duplicates
+    skill = db.query(models.Skill).filter(func.lower(models.Skill.skill_name) == sn.lower()).first()
     if not skill:
         skill = models.Skill(skill_name=sn)
         db.add(skill)
@@ -105,6 +107,7 @@ async def analyze_resumes(
     job_description: str = Form(""),
     files: List[UploadFile] = File(...),
 ):
+    global _LATEST_ANALYSIS
     tmp_paths = []
 
     try:
@@ -119,6 +122,7 @@ async def analyze_resumes(
 
         output = build_output(job_description, tmp_paths)
         output["job_description"] = job_description
+        _LATEST_ANALYSIS = output
         return output
     except HTTPException:
         raise
@@ -138,6 +142,7 @@ async def analyze_fast(
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db)
 ):
+    global _LATEST_ANALYSIS
     tmp_paths = []
     original_names = {}
 
@@ -221,6 +226,13 @@ async def analyze_fast(
         db.commit()
 
         output["job_description"] = job_description
+        _LATEST_ANALYSIS = output
+        
+        # Print the final JSON payload to the terminal for verification
+        print("\n" + "="*40 + " JSON OUTPUT " + "="*40)
+        print(json.dumps(output, indent=2, default=str))
+        print("="*93 + "\n")
+        
         return output
     except HTTPException:
         raise
@@ -247,7 +259,7 @@ async def run_agent(request: ScreenRequest, db: Session = Depends(get_db)):
                 job_id=job_id,
                 resume_id=resume_id,
                 fit_category=screening_result.get("fit_category", ""),
-                fit_score=float(screening_result.get("score", 0.0)),
+                fit_score=float(request.candidate.get("similarity_score", 0.0)),
                 strengths=json.dumps(screening_result.get("strengths", [])),
                 weakness=json.dumps(screening_result.get("weaknesses", [])),
                 missing_requirements=json.dumps(screening_result.get("missing_requirements", [])),
@@ -271,6 +283,40 @@ async def generate_summary(request: SummaryRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc))
 
+
+class JobHistoryItem(BaseModel):
+    name: str
+    fit_category: str
+    fit_score: float
+
+class JobItem(BaseModel):
+    job_id: int
+    title: str
+
+@app.get("/api/jobs", response_model=List[JobItem])
+async def get_jobs(db: Session = Depends(get_db)):
+    """Returns a list of all jobs to populate UI selectors."""
+    jobs = db.query(models.Job).order_by(models.Job.created_at.desc()).all()
+    return jobs
+
+@app.get("/api/history/{job_title}", response_model=List[JobHistoryItem])
+async def get_job_history_by_title(job_title: str, db: Session = Depends(get_db)):
+    """Returns the ranked screening history for a given job title."""
+    results = (
+        db.query(
+            models.Profile.name,
+            models.ScreeningResult.fit_category,
+            models.ScreeningResult.fit_score,
+        )
+        .join(models.Resume, models.ScreeningResult.resume_id == models.Resume.resume_id)
+        .join(models.Profile, models.Resume.profile_id == models.Profile.profile_id)
+        .join(models.Job, models.ScreeningResult.job_id == models.Job.job_id)
+        .filter(models.Job.title == job_title)
+        .order_by(models.ScreeningResult.fit_score.desc())
+        .all()
+    )
+    
+    return [{"name": name, "fit_category": fit_category, "fit_score": fit_score or 0} for name, fit_category, fit_score in results]
 
 @app.post("/api/upload-analysis")
 async def upload_analysis(payload: Dict[str, Any]):

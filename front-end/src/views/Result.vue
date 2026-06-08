@@ -82,23 +82,6 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-3 gap-3 mt-5">
-          <!-- <div class="rounded-xl bg-slate-50 p-3">
-                        <p class="text-xs text-slate-500">Embedding</p>
-                        <p class="text-lg font-semibold text-slate-900">{{ candidate.embedding_score ?? 0 }}%</p>
-                    </div>
-                    <div class="rounded-xl bg-slate-50 p-3">
-                        <p class="text-xs text-slate-500">Skills</p>
-                        <p class="text-lg font-semibold text-slate-900">{{ candidate.skill_score ?? 0 }}%</p>
-                    </div> -->
-          <div class="rounded-xl bg-slate-50 p-3">
-            <p class="text-xs text-slate-500">Matched</p>
-            <p class="text-lg font-semibold text-slate-900">
-              {{ candidate.matched_skills.length }}
-            </p>
-          </div>
-        </div>
-
         <div class="mt-5">
           <p class="text-sm font-semibold text-slate-700 mb-2">
             Matched Skills
@@ -150,121 +133,73 @@
             >
               <i class="pi pi-spin pi-spinner"></i> Generating AI summary...
             </div>
-            <p v-else class="text-sm text-slate-600 line-clamp-4">
+            <div v-else class="text-sm text-slate-600 max-h-32 overflow-y-auto pr-3 whitespace-pre-line text-justify">
               {{
                 candidate.ai_summary ||
                 candidate.summary ||
                 "No summary extracted."
               }}
-            </p>
+            </div>
           </div>
-                    <div>
-                        <p class="text-sm font-semibold text-slate-700 mb-2">Education</p>
-                        <div v-if="candidate.llm_resume?.education" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div class="rounded-xl bg-slate-50 p-3">
-                            <p
-                              class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1"
-                            >
-                              Bachelor
-                            </p>
-                            <p class="text-sm text-slate-600 line-clamp-3">
-                              {{
-                                formatEducationBucket(
-                                  candidate.llm_resume?.education?.bachelor_edu,
-                                ) || "No bachelor education extracted."
-                              }}
-                            </p>
-                          </div>
-                          <div class="rounded-xl bg-slate-50 p-3">
-                            <p
-                  class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1"
-                >
-                  Master
-                            </p>
-                            <p class="text-sm text-slate-600 line-clamp-3">
-                              {{
-                                formatEducationBucket(
-                                  candidate.llm_resume?.education?.master_edu,
-                                ) || "No master education extracted."
-                              }}
-                            </p>
-                          </div>
-                          <div class="rounded-xl bg-slate-50 p-3">
-                <p
-                  class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1"
-                >
-                  PhD
-                            </p>
-                            <p class="text-sm text-slate-600 line-clamp-3">
-                              {{
-                                formatEducationBucket(
-                                  candidate.llm_resume?.education?.phd_edu,
-                                ) || "No PhD education extracted."
-                              }}
-                            </p>
-                          </div>
-                          <div class="rounded-xl bg-slate-50 p-3">
-                <p
-                  class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1"
-                >
-                  Other
-                            </p>
-                            <p class="text-sm text-slate-600 line-clamp-3">
-                              {{
-                                formatEducationBucket(
-                                  candidate.llm_resume?.education?.other_edu,
-                                ) || "No additional education extracted."
-                              }}
-                            </p>
-                          </div>
-                        </div>
-                        <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div class="rounded-xl bg-slate-50 p-3">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                              Bachelor
-                            </p>
-                            <p class="text-sm text-slate-600 line-clamp-3">
-                              {{
-                                formatEducationBucket(candidate.education?.bachelor_edu) ||
-                                "No bachelor education extracted."
-                              }}
-                            </p>
-                          </div>
-                          <div class="rounded-xl bg-slate-50 p-3">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                              Master
-                            </p>
-                            <p class="text-sm text-slate-600 line-clamp-3">
-                              {{
-                                formatEducationBucket(candidate.education?.master_edu) ||
-                                "No master education extracted."
-                              }}
-                            </p>
-                          </div>
-                          <div class="rounded-xl bg-slate-50 p-3">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                              PhD
-                            </p>
-                            <p class="text-sm text-slate-600 line-clamp-3">
-                              {{
-                                formatEducationBucket(candidate.education?.phd_edu) ||
-                                "No PhD education extracted."
-                              }}
-                            </p>
-                          </div>
-                          <div class="rounded-xl bg-slate-50 p-3">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                              Other
-                            </p>
-                            <p class="text-sm text-slate-600 line-clamp-3">
-                              {{
-                                formatEducationBucket(candidate.education?.other_edu) ||
-                                "No additional education extracted."
-                              }}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+          
+          <!-- Education Section -->
+          <div>
+            <p class="text-sm font-semibold text-slate-700 mb-2">Education</p>
+            <div v-if="candidate.llm_resume?.education" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Bachelor</p>
+                <p class="text-sm text-slate-600 whitespace-pre-line">
+                  {{ formatEducationBucket(candidate.llm_resume?.education?.bachelor_edu) || "No bachelor education extracted." }}
+                </p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Master</p>
+                <p class="text-sm text-slate-600 whitespace-pre-line">
+                  {{ formatEducationBucket(candidate.llm_resume?.education?.master_edu) || "No master education extracted." }}
+                </p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">PhD</p>
+                <p class="text-sm text-slate-600 whitespace-pre-line">
+                  {{ formatEducationBucket(candidate.llm_resume?.education?.phd_edu) || "No PhD education extracted." }}
+                </p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Other</p>
+                <p class="text-sm text-slate-600 whitespace-pre-line">
+                  {{ formatEducationBucket(candidate.llm_resume?.education?.other_edu) || "No additional education extracted." }}
+                </p>
+              </div>
+            </div>
+            <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Bachelor</p>
+                <p class="text-sm text-slate-600 whitespace-pre-line">
+                  {{ formatEducationBucket(candidate.education?.bachelor_edu) || "No bachelor education extracted." }}
+                </p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Master</p>
+                <p class="text-sm text-slate-600 whitespace-pre-line">
+                  {{ formatEducationBucket(candidate.education?.master_edu) || "No master education extracted." }}
+                </p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">PhD</p>
+                <p class="text-sm text-slate-600 whitespace-pre-line">
+                  {{ formatEducationBucket(candidate.education?.phd_edu) || "No PhD education extracted." }}
+                </p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Other</p>
+                <p class="text-sm text-slate-600 whitespace-pre-line">
+                  {{ formatEducationBucket(candidate.education?.other_edu) || "No additional education extracted." }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Experience Section -->
           <div>
             <p class="text-sm font-semibold text-slate-700 mb-1">Experience</p>
             <div
@@ -272,23 +207,31 @@
                 Array.isArray(candidate.experience) &&
                 candidate.experience.length
               "
+              class="max-h-60 overflow-y-auto pr-3"
             >
-              <ul class="list-disc pl-4">
-                <li
-                  v-for="(item, idx) in candidate.experience"
-                  :key="idx"
-                  class="text-sm text-slate-600 line-clamp-3"
-                >
-                  <span v-if="typeof item === 'string'">{{ item }}</span>
-                  <span v-else>{{ formatObject(item) }}</span>
-                </li>
-              </ul>
+              <div
+                v-for="(item, idx) in candidate.experience"
+                :key="idx"
+                class="mb-4 border-b border-slate-100 pb-4 last:border-0 last:pb-0 last:mb-0"
+              >
+                <div v-if="typeof item === 'string'" class="text-sm text-slate-600 whitespace-pre-line text-justify">
+                  {{ item }}
+                </div>
+                <div v-else>
+                  <div class="flex justify-between items-start mb-1">
+                    <span class="font-semibold text-slate-800 text-sm">{{ item.experience_title || item.title || item.role || "Unknown Role" }}</span>
+                    <span class="text-xs text-slate-500 whitespace-nowrap ml-3">{{ item.experience_date || item.dates || item.start_date || "" }}</span>
+                  </div>
+                  <p class="text-xs font-medium text-indigo-600 mb-1">{{ item.company || item.institution || item.organization || "" }}</p>
+                  <p class="text-sm text-slate-600 whitespace-pre-line text-justify">{{ item.experience_description || item.description || item.summary || "" }}</p>
+                </div>
+              </div>
             </div>
             <p
               v-else-if="
                 candidate.experience && typeof candidate.experience === 'string'
               "
-              class="text-sm text-slate-600 whitespace-pre-line line-clamp-6"
+              class="max-h-60 overflow-y-auto pr-3 text-sm text-slate-600 whitespace-pre-line text-justify"
             >
               {{ candidate.experience }}
             </p>
@@ -296,29 +239,41 @@
               No experience extracted.
             </p>
           </div>
+
+          <!-- Projects Section -->
           <div>
             <p class="text-sm font-semibold text-slate-700 mb-1">Projects</p>
             <div
               v-if="
                 Array.isArray(candidate.projects) && candidate.projects.length
               "
+              class="max-h-60 overflow-y-auto pr-3"
             >
-              <ul class="list-disc pl-4">
-                <li
-                  v-for="(item, idx) in candidate.projects"
-                  :key="idx"
-                  class="text-sm text-slate-600 line-clamp-3"
-                >
-                  <span v-if="typeof item === 'string'">{{ item }}</span>
-                  <span v-else>{{ formatObject(item) }}</span>
-                </li>
-              </ul>
+              <div
+                v-for="(item, idx) in candidate.projects"
+                :key="idx"
+                class="mb-4 border-b border-slate-100 pb-4 last:border-0 last:pb-0 last:mb-0"
+              >
+                <div v-if="typeof item === 'string'" class="text-sm text-slate-600 whitespace-pre-line text-justify">
+                  {{ item }}
+                </div>
+                <div v-else>
+                  <div class="flex justify-between items-start mb-1">
+                    <span class="font-semibold text-slate-800 text-sm">{{ item.project_title || item.name || item.title || "Unnamed Project" }}</span>
+                    <span class="text-xs text-slate-500 whitespace-nowrap ml-3">{{ item.project_date || item.dates || item.start_date || "" }}</span>
+                  </div>
+                  <p class="text-sm text-slate-600 whitespace-pre-line text-justify">{{ item.project_desc || item.description || item.summary || "" }}</p>
+                  <p v-if="item.technologies && item.technologies.length" class="text-xs text-slate-500 mt-2">
+                    <span class="font-medium text-slate-700">Tech:</span> {{ Array.isArray(item.technologies) ? item.technologies.join(', ') : item.technologies }}
+                  </p>
+                </div>
+              </div>
             </div>
             <p
               v-else-if="
                 candidate.projects && typeof candidate.projects === 'string'
               "
-              class="text-sm text-slate-600 whitespace-pre-line line-clamp-4"
+              class="max-h-60 overflow-y-auto pr-3 text-sm text-slate-600 whitespace-pre-line text-justify"
             >
               {{ candidate.projects }}
             </p>
@@ -591,7 +546,29 @@ const normalizeList = (value) => {
   return [];
 };
 
-const formatEducationBucket = (value) => normalizeList(value).join(", ");
+const formatEducationBucket = (value) => {
+  if (!value) return "";
+  const arr = Array.isArray(value) ? value : [value];
+
+  return arr
+    .filter(Boolean)
+    .map((entry) => {
+      if (typeof entry === "string") return entry.trim();
+
+      // Extract both the university and the degree based on the schema keys
+      const uni = entry.university || entry.institution || entry.bachelor_university || entry.master_university || entry.phd_university || entry.other_text || "";
+      const deg = entry.degree || entry.bachelor_degree || entry.master_degree || entry.phd_degree || entry.other_degree || "";
+      
+      if (uni && deg) return `${deg.trim()} - ${uni.trim()}`;
+      if (deg) return deg.trim();
+      if (uni) return uni.trim();
+      
+      if (entry.raw_text) return entry.raw_text.trim();
+      return formatObject(entry);
+    })
+    .filter(Boolean)
+    .join("\n\n");
+};
 
 const formatLocation = (value) => {
   if (!value) {
@@ -637,15 +614,26 @@ const formatObject = (value) => {
       // Try to build a readable string from common fields
       const parts = [];
       for (const k of [
+        "degree",
         "title",
+        "experience_title",
+        "project_title",
+        "name",
         "role",
+        "university",
+        "institution",
         "company",
         "organization",
         "description",
+        "experience_description",
+        "project_desc",
         "summary",
-        "name",
+        "responsibilities",
+        "steps"
       ]) {
-        if (value[k]) parts.push(value[k]);
+        if (value[k]) {
+          parts.push(Array.isArray(value[k]) ? value[k].join(", ") : value[k]);
+        }
       }
       if (parts.length) return parts.join(" — ");
       return JSON.stringify(value);
@@ -669,12 +657,10 @@ const normalizeCandidate = (candidate) => ({
   matched_skills: normalizeSkills(candidate?.matched_skills),
   extracted_skills: normalizeSkills(candidate?.extracted_skills),
   education: {
-    bachelor_edu: normalizeList(candidate?.education?.bachelor_edu),
-    master_edu: normalizeList(candidate?.education?.master_edu),
-    phd_edu: normalizeList(candidate?.education?.phd_edu),
-    other_edu: normalizeList(
-      candidate?.education?.other_edu || candidate?.education,
-    ),
+    bachelor_edu: candidate?.education?.bachelor_edu || [],
+    master_edu: candidate?.education?.master_edu || [],
+    phd_edu: candidate?.education?.phd_edu || [],
+    other_edu: candidate?.education?.other_edu || candidate?.education || [],
   },
 });
 

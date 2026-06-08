@@ -32,15 +32,15 @@
                 <Select v-model="selectedRole" :options="roles" filter optionLabel="name" placeholder="Select job position" class="w-full">
                     <template #value="slotProps">
                         <div v-if="slotProps.value" class="flex items-center">
-                            <div>{{ slotProps.value.name }}</div>
+                        <div class="text-lg">{{ slotProps.value.name }}</div>
                         </div>
-                        <span v-else>
+                    <span v-else class="text-lg">
                             {{ slotProps.placeholder }}
                         </span>
                     </template>
                     <template #option="slotProps">
                         <div class="flex items-center">
-                            <div>{{ slotProps.option.name }}</div>
+                        <div class="text-lg">{{ slotProps.option.name }}</div>
                         </div>
                     </template>
                 </Select>
@@ -49,31 +49,80 @@
                 <label for="description" class="text-lg font-medium ">Job Description</label>
                 <Textarea class="text-justify" id="description" v-model="jobDescription" rows="5" fluid autoResize readonly />
             </div>
-            <div class="flex justify-center mt-10 pb-5">
-                <Button :loading="loading" class="w-40 !bg-indigo-200 !text-black !border-indigo-900" type="button" label="Submit" icon="pi pi-upload" iconPos="right" @click="createPostFile" style="border-radius: 16px;"></Button>
+            <div class="flex flex-col items-center mt-10 pb-5">
+                <Button :loading="loading" class="w-40 mb-2 !bg-indigo-200 !text-black !border-indigo-900" type="button" label="Submit" icon="pi pi-upload" iconPos="right" @click="createPostFile" style="border-radius: 16px;"></Button>
+                <p v-if="statusMessage" class="text-sm text-indigo-700 font-medium animate-pulse">{{ statusMessage }}</p>
             </div>
         </div>
+
+        <!-- Right column: Screening History -->
         <div class="card col-span-12 xl:col-span-5">
-            <div class="flex flex-col gap-1">
-                <label for="result" class="text-lg font-medium">Result</label>
-                <Textarea class="text-justify" id="result" v-model="result" rows="5" fluid autoResize readonly />
+            <div class="flex items-center justify-between">
+                <h4 class="text-xl font-semibold text-slate-900">Screening History</h4>
+                <Badge v-if="history.length" :value="history.length" severity="info" />
+            </div>
+
+            <div v-if="historyLoading" class="space-y-4">
+                <div v-for="i in 3" :key="i" class="flex items-center gap-3">
+                    <Skeleton shape="circle" size="2.5rem" />
+                    <div class="flex-1">
+                        <Skeleton width="60%" height="1rem" class="mb-2" />
+                        <Skeleton width="40%" height="0.75rem" />
+                    </div>
+                </div>
+            </div>
+
+            <div v-else-if="selectedRole && history.length > 0" class="overflow-y-auto max-h-[600px] pr-2">
+                <ul class="space-y-3">
+                    <li v-for="(item, index) in history" :key="index" class="flex items-center justify-between gap-4 p-3 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors">
+                        <div class="flex items-center gap-3 overflow-hidden">
+                            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold text-sm flex items-center justify-center">
+                                {{ index + 1 }}
+                            </div>
+                            <div class="overflow-hidden">
+                                <p class="font-semibold text-slate-800 truncate" :title="item.name">{{ item.name }}</p>
+                                <Badge :value="item.fit_category" :severity="getBadgeSeverity(item.fit_category)" class="mt-1" />
+                            </div>
+                        </div>
+                        <div class="text-right flex-shrink-0">
+                            <p class="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Match</p>
+                            <p class="text-lg font-bold text-indigo-900">{{ item.fit_score.toFixed(1) }}%</p>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+
+            <div v-else-if="selectedRole && history.length === 0" class="text-center py-12 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                <i class="pi pi-inbox text-6xl text-slate-300 mb-4"></i>
+                <p class="text-xl font-medium">No candidates found for this role yet.</p>
+                <p class="text-base mt-1">Upload resumes to get started!</p>
+            </div>
+
+            <div v-else class="text-center py-12 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                <i class="pi pi-search text-6xl text-slate-300 mb-4"></i>
+                <p class="text-xl font-medium">Select a job position</p>
+                <p class="text-base mt-1">to view its screening history.</p>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import { api } from "../helpers/axios";
 import { useRouter } from "vue-router";
+import Badge from 'primevue/badge';
+import Skeleton from 'primevue/skeleton';
 
 const fileUpload = ref();
 const router = useRouter();
 const selectedRole = ref();
 const jobDescription = ref("");
 const loading = ref(false);
-const defaultResultText = "Select one or more resumes and submit to rank them against the chosen job description.";
-const result = ref(defaultResultText);
+const statusMessage = ref("");
+
+const history = ref([]);
+const historyLoading = ref(false);
 
 const defaultJobDescription = jobDescription.value;
 const formatRoleDescription = (description) => {
@@ -105,18 +154,45 @@ const roles = ref([
     { name: 'Human Resources' },
 ]);
 
+const fetchHistory = async (roleName) => {
+    if (!roleName) {
+        history.value = [];
+        return;
+    }
+    historyLoading.value = true;
+    try {
+        const response = await api.get(`/history/${encodeURIComponent(roleName)}`);
+        history.value = response.data;
+    } catch (error) {
+        console.error(`Failed to fetch history for ${roleName}:`, error);
+        history.value = [];
+    } finally {
+        historyLoading.value = false;
+    }
+};
+
+const getBadgeSeverity = (category) => {
+    const lower = category?.toLowerCase() || '';
+    if (lower.includes('strong')) return 'success';
+    if (lower.includes('potential')) return 'warning';
+    if (lower.includes('weak')) return 'danger';
+    return 'info';
+};
+
 watch(selectedRole, (role) => {
     const roleName = role?.name;
     jobDescription.value = roleName && roleDescriptions[roleName]
         ? roleDescriptions[roleName]
         : defaultJobDescription;
+        
+    fetchHistory(roleName);
 });
 
 const updateFileCount = () => {
     const files = fileUpload.value?.files || [];
-    result.value = files.length > 0
+    statusMessage.value = files.length > 0
         ? `${files.length} file(s) ready for analysis.`
-        : defaultResultText;
+        : '';
 };
 
 const formatSize = (bytes) => {
@@ -208,7 +284,7 @@ const createPostFile = async () => {
     formData.append('job_description', jobDescription.value);
 
     loading.value = true;
-    result.value = 'Extracting resume data...';
+    statusMessage.value = 'Extracting resume data...';
 
     try {
         const response = await api.post('/analyze-fast', formData);
@@ -216,14 +292,14 @@ const createPostFile = async () => {
         normalizedResult.job_description = jobDescription.value;
 
         sessionStorage.setItem('cohr_analysis_result', JSON.stringify(normalizedResult));
-        result.value = `Extraction complete. Proceeding to score ${normalizedResult.total} candidate(s)...`;
+        statusMessage.value = `Extraction complete. Proceeding to score ${normalizedResult.total} candidate(s)...`;
         await router.push('/result');
     } catch (error) {
         console.error("Error uploading resumes:", error);
         if (!error?.response) {
-            result.value = 'Could not reach the backend at http://localhost:8080. Start the FastAPI server, then try again.';
+            statusMessage.value = 'Could not reach the backend at http://localhost:8080. Start the FastAPI server, then try again.';
         } else {
-            result.value = error?.response?.data?.detail || 'Something went wrong while analyzing resumes.';
+            statusMessage.value = error?.response?.data?.detail || 'Something went wrong while analyzing resumes.';
         }
     } finally {
         loading.value = false;

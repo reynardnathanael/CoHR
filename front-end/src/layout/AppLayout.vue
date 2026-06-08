@@ -10,7 +10,7 @@ const { layoutConfig, layoutState, hideMobileMenu } = useLayout();
 const containerClass = computed(() => {
     return {
         // 'layout-overlay': layoutConfig.menuMode === 'overlay',
-        'layout-static': layoutConfig.menuMode === 'static',
+        // 'layout-static': layoutConfig.menuMode === 'static',
         'layout-overlay-active': layoutState.overlayMenuActive,
         'layout-mobile-active': layoutState.mobileMenuActive,
         'layout-static-inactive': layoutState.staticMenuInactive
@@ -21,7 +21,7 @@ const containerClass = computed(() => {
 <template>
     <div class="layout-wrapper" :class="containerClass">
         <AppTopbar />
-        <AppSidebar />
+        <!-- <AppSidebar /> -->
         <div class="layout-main-container">
             <div class="layout-main">
                 <router-view />
