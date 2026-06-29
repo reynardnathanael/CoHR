@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-multipart
+httpx
+pydantic
+sentence-transformers
+scikit-learn
+nltk
+spacy
+skillNer
+pymupdf
+pymupdf4llm

@@ -1,0 +1,32 @@
+import { createRouter, createWebHistory } from 'vue-router';
+import AppLayout from '@/layout/AppLayout.vue';
+
+const router = createRouter({
+    history: createWebHistory(),
+    routes: [
+        {
+            path: '/',
+            component: AppLayout, // This acts as the wrapper for all admin pages
+            redirect: '/upload',
+            children: [
+                // {
+                //     path: '/dashboard',
+                //     name: 'dashboard',
+                //     component: () => import('@/views/Dashboard.vue')
+                // },
+                {
+                    path: '/upload',
+                    name: 'upload',
+                    component: () => import('@/views/UploadResume.vue')
+                },
+                {
+                    path: '/result',
+                    name: 'result',
+                    component: () => import('@/views/Result.vue')
+                },
+            ]
+        }
+    ]
+});
+
+export default router;
